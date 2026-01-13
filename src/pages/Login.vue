@@ -75,7 +75,15 @@ const handleGoogleLogin = async () => {
       
       if (res.code === 200 && res.data) {
         // Save Session
-        localStorage.setItem("autogcmUser", JSON.stringify(res.data));
+        //localStorage.setItem("autogcmUser", JSON.stringify(res.data));
+        
+      const sessionData = {
+            ...res.data, // Keep token/id from API
+            nikeName: dbUser.nickname || res.data.nikeName || "User", // Trust DB first
+            avatarUrl: dbUser.avatar_url || res.data.avatarUrl || ""  // Trust DB first
+        };
+
+        localStorage.setItem("autogcmUser", JSON.stringify(sessionData));
         
         // Ensure Supabase stats are synced
         await runOnboarding(dbUser.phone);
