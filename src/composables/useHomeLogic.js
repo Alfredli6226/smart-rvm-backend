@@ -164,13 +164,32 @@ export function useHomeLogic() {
                 user.value.totalWeight = Number(dbUser.total_weight || 0).toFixed(2);
                 
                 const lifetime = Number(dbUser.lifetime_integral || 0);
-                const { data: withdrawals } = await supabase.from('withdrawals').select('amount').eq('user_id', dbUser.id).neq('status', 'REJECTED');
-                const spent = withdrawals?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
-                user.value.balance = (lifetime - spent).toFixed(2);
+                // New Code (Uses Secure RPC)
+                const { data: financials } = await supabase.rpc('get_user_financial_data', { 
+                    p_user_id: dbUser.id 
+                });
 
-                const { data: submissions } = await supabase.from('submission_reviews').select('machine_given_points').eq('user_id', dbUser.id).eq('status', 'PENDING');
-                const incoming = submissions?.reduce((sum, s) => sum + Number(s.machine_given_points), 0) || 0;
-                user.value.pendingEarnings = incoming.toFixed(2);
+                if (financials) {
+                    // 1. Calculate Spent (IGNORE 'EXTERNAL_SYNC' / MIGRATION records)
+                    // We only want to subtract money the user withdrew using THIS app.
+                    const spent = (financials.withdrawals || [])
+                        .filter(w => w.status !== 'EXTERNAL_SYNC') // ✅ FIX: Ignore migration adjustments
+                        .reduce((sum, w) => sum + Number(w.amount), 0);
+                    
+                    // 2. Calculate Pending Earnings
+                    const pending = (financials.submissions || [])
+                        .filter(s => s.status === 'PENDING')
+                        .reduce((sum, s) => sum + Number(s.machine_given_points), 0);
+
+                    const lifetime = Number(dbUser.lifetime_integral || 0);
+                    
+                    // Logic: Lifetime (63.99) is the "Balance at Migration".
+                    // We only subtract NEW spending.
+                    user.value.balance = (lifetime - spent).toFixed(2);
+                    user.value.pendingEarnings = pending.toFixed(2);
+                    
+                    updateCache();
+                }
 
                 // ✅ UPDATE CACHE: Save new values for next time
                 updateCache();

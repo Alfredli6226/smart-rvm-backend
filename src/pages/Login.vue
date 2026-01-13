@@ -51,20 +51,27 @@ const handleGoogleLogin = async () => {
     const user = result.user;
     const email = user.email;
 
-    // 2. CHECK SUPABASE: Is this email already linked?
-    // We check if this email exists in our 'users' table
+    // 2. CHECK SUPABASE (SECURE RPC): Is this email already linked?
+    // We use .rpc() because RLS prevents direct table access for anon users
     const { data: dbUser, error } = await supabase
-      .from('users')
-      .select('phone, nickname, avatar_url')
-      .eq('email', email)
-      .single();
+      .rpc('get_user_by_email', { check_email: email });
+
+    if (error) {
+        console.error("RPC Error:", error);
+        // Don't throw here, let it fall through to "New User" logic if strictly needed, 
+        // but usually RPC errors are critical.
+    }
 
     if (dbUser && dbUser.phone) {
-      // ✅ USER FOUND: SMART LOGIN (SKIP OTP)
+      // USER FOUND: SMART LOGIN (SKIP OTP)
       console.log("🔹 Smart Login: Email found, logging in as", dbUser.phone);
       
       // Sync with RVM System (AutoGCM) to get session token
-      const res = await syncUser(dbUser.phone, "", "");
+      const res = await syncUser(
+          dbUser.phone, 
+          dbUser.nickname || "",  // Pass existing nickname
+          dbUser.avatar_url || "" // Pass existing avatar
+      );
       
       if (res.code === 200 && res.data) {
         // Save Session

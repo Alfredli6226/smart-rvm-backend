@@ -15,32 +15,14 @@ export async function getMerchantId() {
   if (cachedPlatformId) return cachedPlatformId;
 
   try {
-    // 1. Try to find the dedicated Platform Merchant
-    let { data } = await supabase
-      .from('merchants')
-      .select('id')
-      .eq('name', 'RVM Platform') 
-      .maybeSingle();
+    // ✅ Uses Secure RPC to get ID (Bypasses RLS)
+    const { data, error } = await supabase.rpc('get_platform_id');
 
-    // 2. Fallback: Use 'Demo Shop' if Platform doesn't exist
-    if (!data) {
-        const { data: demo } = await supabase
-            .from('merchants')
-            .select('id')
-            .eq('name', 'Demo Shop')
-            .maybeSingle();
-        data = demo;
-    }
-
-    // 3. Emergency: Just take the first one found
-    if (!data) {
-        const { data: first } = await supabase.from('merchants').select('id').limit(1).single();
-        data = first;
-    }
-
+    if (error) throw error;
+    
     if (data) {
-        cachedPlatformId = data.id;
-        return data.id;
+        cachedPlatformId = data;
+        return data;
     }
     return null;
   } catch (err) {
@@ -49,28 +31,18 @@ export async function getMerchantId() {
   }
 }
 
-export async function getOrCreateUser(phone, nickname = '', avatar = '') {
+export async function getOrCreateUser(phone, nickname = '', avatar = '', email = null) {
   try {
-    let { data, error } = await supabase
-      .from('users')
-      .select('id, lifetime_integral, total_weight') // ✅ Keeps Home Page Weight working
-      .eq('phone', phone)
-      .maybeSingle();
+    // ✅ Pass p_email to the secure RPC
+    const { data, error } = await supabase.rpc('upsert_user_by_phone', {
+      p_phone: phone,
+      p_nickname: nickname || 'New User',
+      p_avatar_url: avatar,
+      p_email: email // ✅ Pass the email here
+    });
 
-    if (data) return data;
-
-    const { data: newUser, error: createError } = await supabase
-      .from('users')
-      .insert([{ 
-          phone: phone, 
-          nickname: nickname || 'New User',
-          avatar_url: avatar 
-      }])
-      .select('id, lifetime_integral, total_weight')
-      .single();
-
-    if (createError) throw createError;
-    return newUser;
+    if (error) throw error;
+    return data; 
   } catch (err) {
     console.error("User Sync Error:", err);
     return null;

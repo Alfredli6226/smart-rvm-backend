@@ -138,16 +138,11 @@ const verifyOTP = async () => {
     const avatarToUse = tempGoogleUser.avatar || "";
     const emailToBind = tempGoogleUser.email || null;
 
-    // Create/Get user in Supabase
-    const supabaseUser = await getOrCreateUser(finalPhone, nameToUse, avatarToUse);
-
-    // ✅ BIND EMAIL for Smart Login next time
+    // Pass emailToBind as the 4th argument
+    const supabaseUser = await getOrCreateUser(finalPhone, nameToUse, avatarToUse, emailToBind);
+    
     if (emailToBind) {
-        await supabase
-            .from('users')
-            .update({ email: emailToBind })
-            .eq('phone', finalPhone);
-        console.log("🔗 Email bound successfully:", emailToBind);
+        console.log("🔗 Email sent to binding logic:", emailToBind);
     }
     
     // Clear temp data

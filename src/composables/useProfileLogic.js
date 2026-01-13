@@ -76,13 +76,12 @@ export function useProfileLogic() {
     try {
       const phone = user.value.phone;
 
-      // 1. Update Supabase
-      const { error } = await supabase
-        .from('users')
-        .update({ nickname: editForm.name, avatar_url: editForm.avatar })
-        .eq('phone', phone);
-
-      if (error) throw error;
+      // 1. Update Supabase (Uses Secure RPC)
+      // We use getOrCreateUser because it internally calls 'upsert_user_by_phone'
+      // which has the permissions to bypass RLS and update the record.
+      const result = await getOrCreateUser(phone, editForm.name, editForm.avatar);
+      
+      if (!result) throw new Error("Database update failed");
 
       // 2. Update AutoGCM (Silent Best Effort)
       try { await updateUserProfile(phone, editForm.name, editForm.avatar); } catch (e) { console.warn(e); }
@@ -115,23 +114,40 @@ export function useProfileLogic() {
     // We already set initial state from cache above, now we refresh
     if (phone) {
         try {
+            // 1. Get/Sync User
             const dbUser = await getOrCreateUser(phone, user.value.name, user.value.avatar);
+            
             if (dbUser) {
                 user.value.name = dbUser.nickname || user.value.name;
                 user.value.avatar = dbUser.avatar_url || user.value.avatar;
                 user.value.totalWeight = Number(dbUser.total_weight || 0).toFixed(2);
 
-                const lifetime = Number(dbUser.lifetime_integral || 0);
-                const { data: withdrawals } = await supabase.from('withdrawals').select('amount').eq('user_id', dbUser.id).neq('status', 'REJECTED');
-                const spent = withdrawals?.reduce((sum, w) => sum + Number(w.amount), 0) || 0;
-                user.value.points = (lifetime - spent).toFixed(2);
+                // 2. Fetch Financials (Securely via RPC)
+                const { data: financials } = await supabase.rpc('get_user_financial_data', { 
+                    p_user_id: dbUser.id 
+                });
 
-                // ✅ UPDATE CACHE
-                localUser.cachedWeight = user.value.totalWeight;
-                localUser.cachedBalance = user.value.points;
-                localStorage.setItem("autogcmUser", JSON.stringify(localUser));
+                if (financials) {
+                    // Calculate Spent (Same logic as Home Page)
+                    // We filter out 'EXTERNAL_SYNC' to avoid double-deducting migration adjustments
+                    const spent = (financials.withdrawals || [])
+                        .filter(w => w.status !== 'EXTERNAL_SYNC') 
+                        .reduce((sum, w) => sum + Number(w.amount), 0);
+
+                    const lifetime = Number(dbUser.lifetime_integral || 0);
+                    
+                    // ✅ CORRECT MATH: Lifetime - Spent = Current Balance
+                    user.value.points = (lifetime - spent).toFixed(2);
+
+                    // Update Cache
+                    localUser.cachedWeight = user.value.totalWeight;
+                    localUser.cachedBalance = user.value.points;
+                    localStorage.setItem("autogcmUser", JSON.stringify(localUser));
+                }
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error("Profile Load Error:", e); 
+        }
     }
     if (user.value.totalWeight === null) user.value.totalWeight = "0.00";
   });

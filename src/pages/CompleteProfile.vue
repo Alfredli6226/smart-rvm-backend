@@ -101,19 +101,8 @@ const saveProfile = async () => {
 
       localStorage.setItem("autogcmUser", JSON.stringify(sessionData));
       
-      // 3. Sync to Supabase (Keep this as is)
-      const { data: dbUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone', phone)
-        .maybeSingle();
-
-      if (dbUser) {
-        await supabase.from('users').update({
-          nickname: nickname.value,
-          avatar_url: avatar.value
-        }).eq('id', dbUser.id);
-      }
+      // 3. Sync to Supabase (Uses Secure RPC)
+      await getOrCreateUser(phone, nickname.value, avatar.value);
 
       // 4. Cleanup & Redirect
       localStorage.removeItem("pendingPhoneVerified");
