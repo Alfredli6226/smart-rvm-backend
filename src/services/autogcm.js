@@ -20,23 +20,34 @@ async function callApi(endpoint, method = 'GET', data = {}) {
   }
 } 
 
-// 1. Register / Sync User (Updated with Safety Fallback)
-export async function syncUser(phone, nickname = "", avatarUrl = "") {
+// 1. Register / Sync User (FIXED to be Non-Destructive)
+export async function syncUser(phone, nickname = undefined, avatarUrl = undefined) {
   console.log(`📡 Syncing User: "${phone}"`);
 
-  // SAFETY CHECK: Ensure nickname is never empty string
-  // If nickname is "" or null, use "RVM User" instead.
-  const safeNickname = (nickname && nickname.trim() !== "") ? nickname : "RVM User";
+  // 1. Start with base payload
+  const payload = { phone };
 
-  return await callApi('/api/open/v1/user/account/sync', 'POST', {
-    phone: phone,
-    nikeName: safeNickname, // ✅ Now guaranteed to have a value
-    avatarUrl: avatarUrl || ""
-  });
+  // 2. ONLY add nickname if it is a real, non-empty string.
+  // We explicitly filter out "New User", "User", and empty strings.
+  // This ensures we don't accidentally overwrite a real name with a placeholder.
+  if (nickname && nickname.trim() !== "" && nickname !== "New User" && nickname !== "User") {
+      payload.nikeName = nickname; // API expects typo 'nikeName'
+  }
+
+  // 3. ONLY add avatar if it exists
+  if (avatarUrl && avatarUrl.trim() !== "") {
+      payload.avatarUrl = avatarUrl;
+  }
+
+  // 4. Send Request
+  // - If payload has ONLY phone -> API returns existing data (Fetch Mode)
+  // - If payload has phone + nikeName -> API updates the user (Update Mode)
+  return await callApi('/api/open/v1/user/account/sync', 'POST', payload);
 }
 
-// Alias for registration flow
-export async function registerUserWithAutoGCM(token, phone, nickname = "", avatarUrl = "") {
+// Alias for registration flow - keeps compatibility with your other files
+export async function registerUserWithAutoGCM(token, phone, nickname = undefined, avatarUrl = undefined) {
+  // Token is unused by machine API, we just pass the rest
   return await syncUser(phone, nickname, avatarUrl);
 }
 
@@ -84,11 +95,8 @@ export async function bindCard(deviceNo, phone) {
 // ✅ 7. Update User Profile
 export async function updateUserProfile(phone, newNickname, newAvatarUrl) {
   if (!phone) throw new Error("Phone number is required for update");
-  return await callApi('/api/open/v1/user/account/sync', 'POST', {
-    phone: phone,
-    nikeName: newNickname, 
-    avatarUrl: newAvatarUrl
-  });
+  // We can reuse syncUser here since it handles the logic perfectly
+  return await syncUser(phone, newNickname, newAvatarUrl);
 }
 
 // ✅ 8. Get Public Machine Records

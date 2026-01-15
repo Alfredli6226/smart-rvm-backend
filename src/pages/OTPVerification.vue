@@ -43,7 +43,7 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { registerUserWithAutoGCM, runOnboarding } from "../services/autogcm.js";
-import { supabase, getOrCreateUser } from "../services/supabase.js"; // Import supabase client
+import { supabase, getOrCreateUser } from "../services/supabase.js"; 
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -100,8 +100,10 @@ const verifyOTP = async () => {
 
     // 3. Register with AutoGCM (Backends)
     try {
-        console.log("👉 Attempt 1: Trying Real Phone:", finalPhone);
-        response = await registerUserWithAutoGCM("", finalPhone, "");
+        console.log("👉 Attempt 1: Fetching/Registering User:", finalPhone);
+        // ✅ CRITICAL FIX: Pass 'undefined' for name/avatar.
+        // This ensures the backend FETCHES existing data instead of overwriting it with "".
+        response = await registerUserWithAutoGCM(null, finalPhone, undefined, undefined);
     } catch (err) {
         console.warn("⚠️ Attempt 1 Failed:", err.message);
         response = null; 
@@ -113,7 +115,8 @@ const verifyOTP = async () => {
         console.log(`🔄 Attempt 2: Retrying with Chinese Format: ${chinesePhone}`);
         statusMessage.value = t('otp.status_retrying'); 
         try {
-            response = await registerUserWithAutoGCM("", chinesePhone, "");
+            // ✅ CRITICAL FIX: Also use undefined here for safety
+            response = await registerUserWithAutoGCM(null, chinesePhone, undefined, undefined);
             usedPhoneForAutoGCM = chinesePhone;
         } catch (err2) {
             console.error("❌ Attempt 2 Failed:", err2.message);
@@ -148,15 +151,25 @@ const verifyOTP = async () => {
     // Clear temp data
     localStorage.removeItem("tempGoogleUser");
 
-    // 5. Onboarding & Redirect
+    // 5. Onboarding & Redirect Logic
     statusMessage.value = t('otp.status_finalizing'); 
     await runOnboarding(finalPhone); 
 
-    if (response.data.isNewUser === 0 && supabaseUser?.nickname && supabaseUser.nickname !== 'New User') {
+    // ✅ SMART REDIRECT LOGIC
+    // Condition 1: Not a new user in machine system (isNewUser === 0)
+    // Condition 2: Has a valid profile in our Supabase DB (not 'New User')
+    const hasValidLocalName = supabaseUser?.nickname && supabaseUser.nickname !== 'New User' && supabaseUser.nickname !== 'User';
+
+    if (response.data.isNewUser === 0 && hasValidLocalName) {
+      // Returning user with fully set up account -> Go Home
       router.push("/home-page");
     } else {
+      // New User OR Returning User with missing profile -> Go to Complete Profile
       localStorage.setItem("pendingPhoneVerified", finalPhone);
+      
+      // Pass the name we safely fetched from the machine API
       const legacyName = response.data?.nikeName || response.data?.name || '';
+      
       router.push({ 
         path: "/complete-profile", 
         query: { legacyName: legacyName } 

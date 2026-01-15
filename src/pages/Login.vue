@@ -77,10 +77,15 @@ const handleGoogleLogin = async () => {
     if (dbUser && dbUser.phone) {
       console.log("🔹 Smart Login: Email found, logging in as", dbUser.phone);
       
+      // FIX: Use 'undefined' if the local nickname is suspicious
+      const safeName = (dbUser.nickname === 'New User' || dbUser.nickname === 'User') 
+                       ? undefined 
+                       : dbUser.nickname;
+
       const res = await syncUser(
           dbUser.phone, 
-          dbUser.nickname || "",  
-          dbUser.avatar_url || "" 
+          safeName, // Pass safe name or undefined
+          dbUser.avatar_url 
       );
       
       if (res.code === 200 && res.data) {
