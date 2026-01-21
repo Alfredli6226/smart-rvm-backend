@@ -76,6 +76,8 @@
             :distance="rvm.distance"
             :address="rvm.address"
             :compartments="rvm.compartments"
+            :latitude="rvm.latitude"  
+            :longitude="rvm.longitude"
           />
         </template>
 

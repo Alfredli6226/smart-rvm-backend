@@ -1,26 +1,16 @@
 import { ref, onMounted } from "vue";
-import { getNearbyRVMs, getMachineConfig } from "../services/autogcm.js";
+import { getMachineConfig, syncUser } from "../services/autogcm.js";
 import { supabase, getOrCreateUser } from "../services/supabase.js";
 
-// Keep global state to share across components if needed
 const globalRvmList = ref([]); 
 const isFirstLoad = ref(true);
 
 export function useHomeLogic() {
-  // 1. Initialize State with Cache immediately
   const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-  const cachedRVMs = JSON.parse(localStorage.getItem("cachedRVMList") || "[]");
-
-  // Populate global list from cache if empty
-  if (globalRvmList.value.length === 0 && cachedRVMs.length > 0) {
-    globalRvmList.value = cachedRVMs;
-    isFirstLoad.value = false; // We have data, so we aren't "loading" visually
-  }
-
+  
   const user = ref({ 
     name: "User", 
     avatar: "/images/profile.png", 
-    // ✅ LOAD CACHE: Use cached values if available, otherwise default
     totalWeight: localUser.cachedWeight || null,
     balance: localUser.cachedBalance || "0.00", 
     phone: "",
@@ -28,14 +18,39 @@ export function useHomeLogic() {
   });
   
   const sliderImages = ref(["/images/banner1.jpg", "/images/banner2.jpg"]);
-  
-  // Only show skeleton if we have NO data in memory AND NO data in cache
   const isLoading = ref(globalRvmList.value.length === 0);
 
-  const HIDDEN_MACHINES = ["071582000008"];
+  // ✅ 1. FALLBACK DATA (Exact copy from your DB)
+  // Used if Supabase RLS blocks the read request.
   const FALLBACK_MACHINES = [
-    { deviceNo: "071582000002", address: "Taman Wawasan Recreational Park, Puchong", isonline: 0, status: 0, distance: 1200 },
-    { deviceNo: "071582000009", address: "Taman Wawasan Recreational Park, Puchong", isonline: 0, status: 0, distance: 1200 }
+      {
+        device_no: "071582000001",
+        name: "RVM Meranti Apartment",
+        latitude: "3.0460396612523435",
+        longitude: "101.60205470543947",
+        address: "Persiaran Subang Mewah, USJ 1, UEP Subang Jaya, Puchong, Selangor"
+      },
+      {
+        device_no: "071582000007",
+        name: "UCO Meranti Apartment",
+        latitude: "3.0460396612523435",
+        longitude: "101.60205470543947",
+        address: "Persiaran Subang Mewah, USJ 1, UEP Subang Jaya, Puchong, Selangor"
+      },
+      {
+        device_no: "071582000002",
+        name: "RVM Taman Wawasan",
+        latitude: "3.0345254531656796",
+        longitude: "101.62379690201492",
+        address: "Balai Masyarakat MBSJ MPP Zon 16, Persiaran Wawasan, Taman Tasik Wawasan, Puchong"
+      },
+      {
+        device_no: "071582000009",
+        name: "UCO Taman Wawasan",
+        latitude: "3.0345254531656796",
+        longitude: "101.62379690201492",
+        address: "Balai Masyarakat MBSJ MPP Zon 16, Persiaran Wawasan, Taman Tasik Wawasan, Puchong"
+      }
   ];
 
   const mapTypeToLabel = (apiName) => {
@@ -54,47 +69,100 @@ export function useHomeLogic() {
     return { text: "Available", color: "green" };
   };
 
+  // Helper: Calculate distance
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return "N/A";
+    const R = 6371; 
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return (R * c).toFixed(2);
+  };
+
   const fetchRVMs = async () => {
-    // Note: We do NOT set isLoading = true here if we already have data.
-    // This creates a "silent update" experience.
     if (globalRvmList.value.length === 0) isLoading.value = true;
 
+    // 2. Get User Location (or Default to Puchong)
+    let userLat = 3.0454;
+    let userLng = 101.6172;
+
+    const isLocationEnabled = localStorage.getItem("useLocation") === "true";
+    if (isLocationEnabled) {
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+        });
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+      } catch (err) {
+        console.warn("Location fetch failed, using default.");
+      }
+    }
+
     try {
-      const nearby = await getNearbyRVMs(3.0454, 101.6172); 
-      let allMachines = nearby?.data && Array.isArray(nearby.data) ? [...nearby.data] : [];
+      // 3. TRY FETCHING FROM DATABASE
+      let machineData = [];
+      const { data: dbMachines, error } = await supabase
+        .from('machines')
+        .select('*')
+        .eq('is_active', true);
 
-      FALLBACK_MACHINES.forEach(fallback => {
-        if (!allMachines.find(m => m.deviceNo === fallback.deviceNo)) allMachines.push(fallback);
-      });
-      allMachines = allMachines.filter(m => !HIDDEN_MACHINES.includes(m.deviceNo));
+      // 4. CHECK IF BLOCKED BY RLS OR EMPTY
+      if (!error && dbMachines && dbMachines.length > 0) {
+        machineData = dbMachines;
+      } else {
+        // RLS blocked us -> Use Fallback
+        console.warn("⚠️ Supabase read failed/empty (RLS Blocked). Using Fallback Data.");
+        machineData = FALLBACK_MACHINES;
+      }
 
-      const detailedMachines = await Promise.all(allMachines.map(async (rvm) => {
-        const configRes = await getMachineConfig(rvm.deviceNo);
+      // 5. PROCESS MACHINES (Fetch Live Status from API)
+      const detailedMachines = await Promise.all(machineData.map(async (rvm) => {
+        // Normalized fields
+        const deviceNo = rvm.device_no || rvm.deviceNo; 
+        const lat = rvm.latitude;
+        const lng = rvm.longitude;
+        
+        // A. Fetch Live Status
+        const configRes = await getMachineConfig(deviceNo);
         const configs = configRes?.data || [];
         const hasValidConfig = (configRes && configRes.code === 200 && configs.length > 0);
-        
-        let computedOnline = false;
-        if (rvm.isonline == 1) computedOnline = true;
-        if (rvm.status == 0 || rvm.status == 1) computedOnline = true;
-        if (hasValidConfig) computedOnline = true;
-        if (FALLBACK_MACHINES.find(f => f.deviceNo === rvm.deviceNo)) computedOnline = true;
 
-        let computedStatus = rvm.status;
+        let isOnline = hasValidConfig; 
+        let computedStatus = 0; 
         if (hasValidConfig) {
              const hasFault = configs.some(c => c.status === 2 || c.status === 3);
              if (hasFault) computedStatus = 3; 
         }
 
-        return { ...rvm, configs, isRealOnline: computedOnline, computedStatus };
+        // B. Calculate Distance
+        const distance = calculateDistance(userLat, userLng, lat, lng);
+
+        return { 
+            ...rvm, 
+            device_no: deviceNo,
+            configs, 
+            isRealOnline: isOnline, 
+            computedStatus,
+            calculatedDistance: distance,
+            finalLat: lat,
+            finalLng: lng
+        };
       }));
 
+      // 6. MAP TO UI
       const mappedList = detailedMachines.map(rvm => {
         const isOnline = rvm.isRealOnline;
         
         const compartments = rvm.configs.map(conf => {
           const { label, color } = mapTypeToLabel(conf.rubbishTypeName);
           let percent = conf.rate ? Math.round(conf.rate) : 0;
-          if (label === "Used Cooking Oil") percent = Math.round((Number(conf.weight || 0) / 400) * 100);
+          if (label === "Used Cooking Oil") {
+              percent = Math.round((Number(conf.weight || 0) / 400) * 100);
+          }
           
           const isBinFull = (percent >= 100 || conf.isFull);
           if (isBinFull) percent = 100;
@@ -103,7 +171,9 @@ export function useHomeLogic() {
           return { label, color, statusText: statusObj.text, statusColor: statusObj.color, percent, isFull: isBinFull };
         });
 
-        if (compartments.length === 0) compartments.push({ label: "Loading...", color: "gray", percent: 0, isFull: false });
+        if (compartments.length === 0) {
+           compartments.push({ label: "Loading...", color: "gray", percent: 0, isFull: false });
+        }
 
         let machineStatusText = "Offline";
         if (isOnline) {
@@ -113,18 +183,21 @@ export function useHomeLogic() {
         }
 
         return {
-          deviceNo: rvm.deviceNo,
+          deviceNo: rvm.device_no,
           status: machineStatusText,
-          distance: (rvm.distance / 1000).toFixed(2),
-          address: rvm.address,
+          distance: rvm.calculatedDistance,
+          address: rvm.address || rvm.location_name || rvm.name,
+          latitude: rvm.finalLat, 
+          longitude: rvm.finalLng,
           compartments: compartments.sort((a, b) => a.label.localeCompare(b.label))
         };
       });
 
+      // Sort by Distance
+      mappedList.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+
       globalRvmList.value = mappedList;
       isFirstLoad.value = false;
-      
-      // ✅ SAVE CACHE: Store the fresh list so next time it loads instantly
       localStorage.setItem("cachedRVMList", JSON.stringify(mappedList));
 
     } catch (e) {
@@ -143,55 +216,69 @@ export function useHomeLogic() {
   };
 
   onMounted(async () => {
-    // 1. READ LOCAL STORAGE (Immediate Display)
+    // 1. READ LOCAL STORAGE
     const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
-    const displayName = localUser.nikeName || localUser.nickname || localUser.name || "User";
+    let displayName = localUser.nikeName || localUser.nickname || localUser.name || "User";
     
     user.value.name = displayName;
     user.value.avatar = localUser.avatarUrl || localUser.avatar || "/images/profile.png";
     user.value.phone = localUser.phone || localUser.phonenumber || localUser.phoneNumber || "";
 
-    // 2. FETCH DB DATA (Background Update)
+    const isGenericName = (n) => !n || n === "User" || n === "New User";
+
+    // 2. FETCH DB DATA
     if (user.value.phone) {
         try {
+            if (isGenericName(displayName)) {
+               try {
+                  const { data: existingUser } = await supabase
+                      .from('users')
+                      .select('nickname, avatar_url')
+                      .eq('phone', user.value.phone)
+                      .single();
+
+                  if (existingUser && !isGenericName(existingUser.nickname)) {
+                       displayName = existingUser.nickname;
+                       if (existingUser.avatar_url) user.value.avatar = existingUser.avatar_url;
+                  } 
+                  else {
+                       const apiRes = await syncUser(user.value.phone); 
+                       const remoteName = apiRes?.data?.nikeName;
+                       if (remoteName && !isGenericName(remoteName)) {
+                           displayName = remoteName;
+                       }
+                  }
+               } catch (e) {
+                  console.warn("Profile check failed:", e);
+               }
+            }
+
             const dbUser = await getOrCreateUser(user.value.phone, displayName, user.value.avatar);
             
             if (dbUser) {
                 user.value.name = dbUser.nickname || displayName;
                 user.value.avatar = dbUser.avatar_url || user.value.avatar;
-                
-                // Stats
                 user.value.totalWeight = Number(dbUser.total_weight || 0).toFixed(2);
                 
-                const lifetime = Number(dbUser.lifetime_integral || 0);
-                // New Code (Uses Secure RPC)
                 const { data: financials } = await supabase.rpc('get_user_financial_data', { 
                     p_user_id: dbUser.id 
                 });
 
                 if (financials) {
-                    // 1. Calculate Spent (IGNORE 'EXTERNAL_SYNC' / MIGRATION records)
-                    // We only want to subtract money the user withdrew using THIS app.
                     const spent = (financials.withdrawals || [])
-                        .filter(w => w.status !== 'EXTERNAL_SYNC') // ✅ FIX: Ignore migration adjustments
+                        .filter(w => w.status !== 'EXTERNAL_SYNC') 
                         .reduce((sum, w) => sum + Number(w.amount), 0);
                     
-                    // 2. Calculate Pending Earnings
                     const pending = (financials.submissions || [])
                         .filter(s => s.status === 'PENDING')
                         .reduce((sum, s) => sum + Number(s.machine_given_points), 0);
 
                     const lifetime = Number(dbUser.lifetime_integral || 0);
                     
-                    // Logic: Lifetime (63.99) is the "Balance at Migration".
-                    // We only subtract NEW spending.
                     user.value.balance = (lifetime - spent).toFixed(2);
                     user.value.pendingEarnings = pending.toFixed(2);
-                    
                     updateCache();
                 }
-
-                // ✅ UPDATE CACHE: Save new values for next time
                 updateCache();
             }
         } catch (err) {
@@ -199,7 +286,7 @@ export function useHomeLogic() {
             if (user.value.totalWeight === null) user.value.totalWeight = "0.00";
         }
     } else {
-        console.warn("⚠️ No phone number found in localStorage 'autogcmUser'");
+        console.warn("⚠️ No phone found");
         user.value.totalWeight = "0.00";
     }
 

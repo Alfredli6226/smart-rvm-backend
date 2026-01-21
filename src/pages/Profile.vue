@@ -29,6 +29,23 @@
       </div>
     </div>
 
+    <div class="w-11/12 max-w-md bg-white rounded-2xl shadow p-4 mt-4 flex items-center justify-between text-gray-700">
+       <div class="flex items-center gap-3">
+         <div class="bg-blue-100 p-2 rounded-full text-blue-600">
+           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+           </svg>
+         </div>
+         <span class="font-medium text-sm">Enable Location</span>
+       </div>
+
+       <label class="relative inline-flex items-center cursor-pointer">
+         <input type="checkbox" :checked="locationEnabled" @change="toggleLocation" class="sr-only peer">
+         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+       </label>
+    </div>
+
     <button 
       @click="openEditModal"
       class="mt-8 text-green-600 font-semibold hover:underline"
@@ -121,5 +138,6 @@ import { Loader2 } from "lucide-vue-next"; // Import Spinner Icon
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
-const { user, showLogoutModal, showEditModal, isSaving, editForm, presetAvatars, feedbackModal, closeFeedback, handleImageError, confirmLogout, performLogout, openEditModal, saveProfile } = useProfileLogic();
+const { user, showLogoutModal, showEditModal, isSaving, editForm, presetAvatars, feedbackModal, closeFeedback, handleImageError, confirmLogout, performLogout, openEditModal, saveProfile, locationEnabled, 
+   toggleLocation } = useProfileLogic();
 </script>

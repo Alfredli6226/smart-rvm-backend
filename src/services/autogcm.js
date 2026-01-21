@@ -27,11 +27,13 @@ export async function syncUser(phone, nickname = undefined, avatarUrl = undefine
   // 1. Start with base payload
   const payload = { phone };
 
-  // 2. ONLY add nickname if it is a real, non-empty string.
-  // We explicitly filter out "New User", "User", and empty strings.
-  // This ensures we don't accidentally overwrite a real name with a placeholder.
+  // 2. UPDATED LOGIC (REPLACE THIS BLOCK):
+  // If nickname is real, send it (Update Mode).
+  // If nickname is missing/generic, send "" (Fetch Mode) to satisfy API requirements.
   if (nickname && nickname.trim() !== "" && nickname !== "New User" && nickname !== "User") {
-      payload.nikeName = nickname; // API expects typo 'nikeName'
+      payload.nikeName = nickname; 
+  } else {
+      payload.nikeName = ""; // <--- CRITICAL FIX: Send empty string instead of undefined
   }
 
   // 3. ONLY add avatar if it exists
@@ -40,8 +42,6 @@ export async function syncUser(phone, nickname = undefined, avatarUrl = undefine
   }
 
   // 4. Send Request
-  // - If payload has ONLY phone -> API returns existing data (Fetch Mode)
-  // - If payload has phone + nikeName -> API updates the user (Update Mode)
   return await callApi('/api/open/v1/user/account/sync', 'POST', payload);
 }
 

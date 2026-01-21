@@ -14,11 +14,27 @@
       </span>
     </div>
 
-    <div class="p-4">
+    <div class="p-4 relative">
       <div class="flex justify-between items-start text-gray-700 mb-3">
         <p class="font-semibold text-sm leading-tight flex-1 pr-2">{{ address }}</p>
-        <div class="flex items-center text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0">
-            📍 {{ distance }} km
+        
+        <div class="flex flex-col items-end gap-2 flex-shrink-0">
+           <div class="flex items-center text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full whitespace-nowrap">
+              📍 {{ distance }} km
+           </div>
+
+           <a 
+             v-if="latitude && longitude"
+             :href="`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`"
+             target="_blank"
+             class="flex items-center gap-1 bg-green-600 text-white text-[10px] px-3 py-1.5 rounded-full font-bold shadow-sm hover:bg-green-700 transition"
+           >
+             <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+             </svg>
+             GO
+           </a>
         </div>
       </div>
 
@@ -77,6 +93,8 @@ defineProps({
   distance: [Number, String],
   address: String,
   compartments: Array, 
+  latitude: [Number, String], 
+  longitude: [Number, String], 
 });
 
 // 1. Translate Machine Status (Online, Maintenance, etc)

@@ -42,6 +42,35 @@ export function useProfileLogic() {
     "https://api.dicebear.com/7.x/avataaars/svg?seed=Milo",
   ];
 
+
+  const locationEnabled = ref(localStorage.getItem("useLocation") === "true");
+
+  // Add this new function
+  const toggleLocation = () => {
+    if (!locationEnabled.value) {
+      // User wants to turn ON -> Request Permission
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          () => {
+            locationEnabled.value = true;
+            localStorage.setItem("useLocation", "true");
+            alert("Location enabled! Nearby machines will update on the Home page.");
+          },
+          (error) => {
+            console.error("Permission denied", error);
+            locationEnabled.value = false;
+            localStorage.setItem("useLocation", "false");
+            alert("Location permission denied. Please enable it in your browser settings.");
+          }
+        );
+      }
+    } else {
+      // User wants to turn OFF
+      locationEnabled.value = false;
+      localStorage.setItem("useLocation", "false");
+    }
+  };
+
   // --- Helpers ---
   const showFeedback = (title, message, isError = false) => {
     feedbackModal.title = title;
@@ -166,6 +195,8 @@ export function useProfileLogic() {
     confirmLogout,
     performLogout,
     openEditModal,
-    saveProfile
+    saveProfile,
+    locationEnabled, 
+    toggleLocation   
   };
 }

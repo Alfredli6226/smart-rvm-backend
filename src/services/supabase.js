@@ -38,7 +38,7 @@ export async function getOrCreateUser(phone, nickname = '', avatar = '', email =
       p_phone: phone,
       p_nickname: nickname || 'New User',
       p_avatar_url: avatar,
-      p_email: email // ✅ Pass the email here
+      p_email: email // Pass the email here
     });
 
     if (error) throw error;
