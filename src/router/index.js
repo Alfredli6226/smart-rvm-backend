@@ -4,36 +4,84 @@ import Login from "../pages/Login.vue";
 import PhoneVerification from "../pages/PhoneVerification.vue";
 import OTPVerification from "../pages/OTPVerification.vue";
 import CompleteProfile from "../pages/CompleteProfile.vue";
-import RegistrationComplete from "../pages/RegistrationComplete.vue"; // ✅ Keep this one
+import RegistrationComplete from "../pages/RegistrationComplete.vue"; 
 import Homepage from "../pages/HomePage.vue";
 import Profile from "../pages/Profile.vue";
 import UserDashboard from "../pages/UserDashboard.vue";
 import WithdrawPage from "../pages/WithdrawPage.vue";
 
-// ❌ DELETED: import RegistrationComplete from '../pages/RegistrationComplete.vue' (Duplicate)
-
 const routes = [
-  { path: "/", component: Welcome },
-  { path: "/login", component: Login },
-  { path: "/verify-phone", component: PhoneVerification},
-  { path: "/complete-profile", component: CompleteProfile},
-  { path: "/enter-otp", component: OTPVerification },
-  
-  // ✅ This uses the import from above. 
-  // I kept both paths just in case you use /register-success elsewhere, 
-  // but they both point to the same page now.
-  { path: "/register-success", component: RegistrationComplete},
-  { path: '/registration-complete', component: RegistrationComplete }, 
-
-  { path: "/home-page", component: Homepage},
-  { path: "/profile", component: Profile},
-  { path: "/dashboard", component: UserDashboard },
-  { path: "/withdraw", component: WithdrawPage },
+  { 
+    path: "/", 
+    component: Welcome,
+    meta: { title: 'Welcome' } 
+  },
+  { 
+    path: "/login", 
+    component: Login,
+    meta: { title: 'Login' } 
+  },
+  { 
+    path: "/verify-phone", 
+    component: PhoneVerification,
+    meta: { title: 'Verify Phone' } 
+  },
+  { 
+    path: "/complete-profile", 
+    component: CompleteProfile,
+    meta: { title: 'Complete Profile' } 
+  },
+  { 
+    path: "/enter-otp", 
+    component: OTPVerification,
+    meta: { title: 'Enter OTP' } 
+  },
+  { 
+    path: "/register-success", 
+    component: RegistrationComplete,
+    meta: { title: 'Registration Complete' } 
+  },
+  { 
+    path: '/registration-complete', 
+    component: RegistrationComplete,
+    meta: { title: 'Registration Complete' } 
+  }, 
+  { 
+    path: "/home-page", 
+    component: Homepage,
+    meta: { title: 'Home' } 
+  },
+  { 
+    path: "/profile", 
+    component: Profile,
+    meta: { title: 'My Profile' } 
+  },
+  { 
+    path: "/dashboard", 
+    component: UserDashboard,
+    meta: { title: 'Dashboard' } 
+  },
+  { 
+    path: "/withdraw", 
+    component: WithdrawPage,
+    meta: { title: 'Withdraw Funds' } 
+  },
 ];
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
+});
+
+// 🚀 DYNAMIC TITLE LOGIC
+router.beforeEach((to, from, next) => {
+  const defaultTitle = "Smart RVM"; // The base name of your app
+  
+  // If the route has a title, format it as "Page Name | Smart RVM"
+  // Otherwise, just use "Smart RVM"
+  document.title = to.meta.title ? `${to.meta.title} | ${defaultTitle}` : defaultTitle;
+  
+  next();
 });
 
 export default router;

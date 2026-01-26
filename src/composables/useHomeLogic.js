@@ -88,17 +88,39 @@ export function useHomeLogic() {
     // 2. Get User Location (or Default to Puchong)
     let userLat = 3.0454;
     let userLng = 101.6172;
+    
+    // NEW: Ask if explicitly enabled OR if it's the first visit (null)
+    const storedSetting = localStorage.getItem("useLocation");
+    const shouldAsk = storedSetting === "true" || storedSetting === null;
 
-    const isLocationEnabled = localStorage.getItem("useLocation") === "true";
-    if (isLocationEnabled) {
+    if (shouldAsk) {
       try {
         const pos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+          navigator.geolocation.getCurrentPosition(
+            resolve, 
+            reject, 
+            { 
+               enableHighAccuracy: true, 
+               timeout: 10000, 
+               maximumAge: 0 
+            }
+          );
         });
+
+        // User Allowed: Save "true" so toggle stays ON
+        localStorage.setItem("useLocation", "true");
+        
         userLat = pos.coords.latitude;
         userLng = pos.coords.longitude;
+
       } catch (err) {
-        console.warn("Location fetch failed, using default.");
+        console.warn("Location denied or failed:", err.message);
+        
+        // User Denied: Save "false" so we don't annoy them next time
+        // (Only save false if it was a permission denial, code 1)
+        if (err.code === 1) {
+            localStorage.setItem("useLocation", "false");
+        }
       }
     }
 
