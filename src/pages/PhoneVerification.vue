@@ -14,81 +14,68 @@
         </div>
       </div>
 
-      <button @click="sendOTP" 
-        class="w-full mt-6 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition">
-        {{ t('phone.button_send') }}
+      <button @click="sendOTP" :disabled="isLoading"
+        class="w-full mt-6 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition flex justify-center items-center gap-2">
+        <svg v-if="isLoading" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>{{ isLoading ? "Sending..." : t('phone.button_send') }}</span>
       </button>
 
-      <div id="recaptcha-container"></div>
+      <p v-if="errorMessage" class="mt-4 text-sm text-red-500">{{ errorMessage }}</p>
 
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from "vue";
+import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { auth, RecaptchaVerifier, signInWithPhoneNumber } from "../firebase.js";
 import { useI18n } from "vue-i18n";
+import axios from "axios"; 
 
 const { t } = useI18n();
 const router = useRouter();
 const phone = ref("");
-
-// Note: We do not need 'let verifier = null' here. We use window.recaptchaVerifier directly.
-
-onMounted(async () => {
-  await nextTick();
-  // Clear existing instance if any to prevent duplicates on re-mount
-  if (window.recaptchaVerifier) {
-    window.recaptchaVerifier.clear();
-    window.recaptchaVerifier = null;
-  }
-
-  // Initialize reCAPTCHA
-  window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-    size: "invisible",
-    callback: (response) => {
-      // reCAPTCHA solved
-      console.log("reCAPTCHA solved:", response);
-    },
-    "expired-callback": () => {
-      console.log("reCAPTCHA expired");
-    }
-  });
-
-  // Render explicitly to catch initialization errors early
-  try {
-    await window.recaptchaVerifier.render();
-    console.log("reCAPTCHA rendered successfully");
-  } catch (e) {
-    console.error("reCAPTCHA render error:", e);
-  }
-});
+const isLoading = ref(false);
+const errorMessage = ref("");
 
 const sendOTP = async () => {
   if (!phone.value) {
-    alert("Please enter a phone number");
+    errorMessage.value = "Please enter a phone number";
     return;
   }
 
-  // Ensure phone number has no spaces
-  const cleanPhone = phone.value.replace(/\s+/g, '');
-  const fullPhone = "+60" + cleanPhone;
-  console.log("📤 Sending OTP to:", fullPhone);
-
-  // ⭐ CRITICAL FIX: Use window.recaptchaVerifier here
-  const appVerifier = window.recaptchaVerifier;
-
-  if (!appVerifier) {
-    alert("reCAPTCHA not initialized. Please refresh the page.");
-    return;
-  }
+  isLoading.value = true;
+  errorMessage.value = "";
 
   try {
-    const confirmation = await signInWithPhoneNumber(auth, fullPhone, appVerifier);
+    // 1. Format for WaAPI (Must start with 60 for Malaysia)
+    // Remove non-digits
+    const cleanPhone = phone.value.replace(/\D/g, ''); 
+    
+    // Ensure it starts with 60. 
+    // If user typed '012...', cleanPhone is '012...'. We remove leading '0' and add '60'.
+    // If user typed '12...', cleanPhone is '12...'. We add '60'.
+    let fullPhone = "";
+    if (cleanPhone.startsWith('0')) {
+        fullPhone = '60' + cleanPhone.substring(1);
+    } else if (cleanPhone.startsWith('60')) {
+        fullPhone = cleanPhone;
+    } else {
+        fullPhone = '60' + cleanPhone;
+    }
 
-    window.confirmationResult = confirmation;
+    console.log("📤 Sending OTP to:", fullPhone);
+
+    // 2. Call Your Backend API
+    await axios.post('/api/auth-otp', {
+      action: 'send',
+      phone: fullPhone
+    });
+
+    // 3. Save the WaAPI format phone number to local storage for verification step
     localStorage.setItem("pendingPhone", fullPhone);
 
     console.log("✅ OTP sent");
@@ -96,13 +83,9 @@ const sendOTP = async () => {
 
   } catch (err) {
     console.error("❌ OTP error:", err);
-    // Reload captcha if it failed
-    if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.render().then(widgetId => {
-            grecaptcha.reset(widgetId);
-        });
-    }
-    alert("Failed to send OTP: " + err.message);
+    errorMessage.value = err.response?.data?.msg || err.message || "Failed to send OTP";
+  } finally {
+    isLoading.value = false;
   }
 };
 </script>

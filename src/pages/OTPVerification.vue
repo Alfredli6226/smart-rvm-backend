@@ -43,8 +43,9 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { registerUserWithAutoGCM, runOnboarding } from "../services/autogcm.js";
-import { supabase, getOrCreateUser } from "../services/supabase.js"; 
+import { getOrCreateUser } from "../services/supabase.js"; 
 import { useI18n } from "vue-i18n";
+import axios from "axios";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -54,7 +55,8 @@ const errorMessage = ref("");
 const statusMessage = ref(""); 
 
 onMounted(() => {
-  if (!window.confirmationResult) {
+  // Check if we have a phone number pending (Stored in PhoneVerification.vue)
+  if (!localStorage.getItem("pendingPhone")) {
     router.push("/verify-phone");
   }
 });
@@ -68,9 +70,29 @@ const moveToPrev = (index, event) => {
   if (!otp.value[index] && index > 0) event.target.previousElementSibling?.focus();
 };
 
+// 🇨🇳 UPDATED: Converts Malaysian numbers to VALID Chinese formats (13x, 18x, etc.)
 const convertToChineseFormat = (phone) => {
-  if (phone.length === 10 && phone.startsWith('0')) return '1' + phone;
-  if (phone.length === 11 && phone.startsWith('0')) return '1' + phone.substring(1);
+  // Case 1: Standard Malaysia 10 digits (e.g., 0167403654)
+  // Logic: Remove '0' (leaving 9 digits), add '13' (total 11 digits)
+  // Result: 13167403654 (Valid Chinese Mobile Format)
+  if (phone.length === 10 && phone.startsWith('0')) {
+    return '13' + phone.substring(1);
+  }
+
+  // Case 2: Standard Malaysia 11 digits (e.g., 01112345678)
+  // Logic: Replace '011' with '131' (Valid China Unicom Prefix)
+  // Result: 13112345678 (Valid Chinese Mobile Format)
+  if (phone.length === 11 && phone.startsWith('011')) {
+    return '131' + phone.substring(3);
+  }
+
+  // Fallback: If it's another 11-digit number starting with 0
+  // Replace '0' with '1' (Result starts with 1, 11 digits total)
+  // Note: 10... might fail, so we try to ensure it starts with 13/15/18 if possible
+  if (phone.length === 11 && phone.startsWith('0')) {
+    return '13' + phone.substring(2); // Forces it into a 13x format
+  }
+
   return phone; 
 };
 
@@ -83,41 +105,63 @@ const verifyOTP = async () => {
   statusMessage.value = t('otp.status_verifying'); 
 
   try {
-    if (!window.confirmationResult) {
-      throw new Error("Session expired. Please try again.");
+    const waapiPhone = localStorage.getItem("pendingPhone"); // Format: 60123456789
+
+    // 1. Verify with YOUR Backend (WaAPI logic)
+    // ----------------------------------------------------------------
+    try {
+        const verifyRes = await axios.post('/api/auth-otp', {
+            action: 'verify',
+            phone: waapiPhone,
+            code: code
+        });
+        
+        if (!verifyRes.data.success) {
+            throw new Error(verifyRes.data.msg || "Invalid OTP");
+        }
+    } catch (apiErr) {
+        throw new Error(apiErr.response?.data?.msg || "OTP Verification Failed");
     }
 
-    // 1. Verify with Firebase
-    const result = await window.confirmationResult.confirm(code);
-    const firebaseUser = result.user;
-
-    // 2. Format the Real Malaysian Number
-    let rawPhone = firebaseUser.phoneNumber; 
-    let finalPhone = rawPhone.replace('+60', '0');
-
+    // 2. Prepare Phone Number for AutoGCM
+    // ----------------------------------------------------------------
+    // waapiPhone is '60123456789'. We need '0123456789' for the standard check.
+    let standardPhone = waapiPhone;
+    if (waapiPhone.startsWith('60')) {
+        standardPhone = '0' + waapiPhone.substring(2);
+    }
+    
     let response = null;
-    let usedPhoneForAutoGCM = finalPhone;
+    let finalUsedPhone = standardPhone; // This is what we will save to Supabase
 
-    // 3. Register with AutoGCM (Backends)
+    // 3. Register/Sync with AutoGCM (Backends)
+    // ----------------------------------------------------------------
     try {
-        console.log("👉 Attempt 1: Fetching/Registering User:", finalPhone);
-        // ✅ CRITICAL FIX: Pass 'undefined' for name/avatar.
-        // This ensures the backend FETCHES existing data instead of overwriting it with "".
-        response = await registerUserWithAutoGCM(null, finalPhone, undefined, undefined);
+        console.log("👉 Attempt 1: Fetching/Registering User (Standard):", standardPhone);
+        
+        // Pass 'undefined' for name/avatar to FETCH existing data without overwriting
+        response = await registerUserWithAutoGCM(null, standardPhone, undefined, undefined);
+    
     } catch (err) {
-        console.warn("⚠️ Attempt 1 Failed:", err.message);
+        console.warn("⚠️ Attempt 1 Failed (Standard Format):", err.message);
         response = null; 
     }
 
+    // If Standard failed (likely because user is NEW and needs Chinese format)
     if (!response || response.code !== 200) {
-      const chinesePhone = convertToChineseFormat(finalPhone);
-      if (chinesePhone !== finalPhone) {
+      const chinesePhone = convertToChineseFormat(standardPhone);
+      
+      // Only retry if the conversion actually changed the number
+      if (chinesePhone !== standardPhone) {
         console.log(`🔄 Attempt 2: Retrying with Chinese Format: ${chinesePhone}`);
         statusMessage.value = t('otp.status_retrying'); 
+        
         try {
-            // ✅ CRITICAL FIX: Also use undefined here for safety
             response = await registerUserWithAutoGCM(null, chinesePhone, undefined, undefined);
-            usedPhoneForAutoGCM = chinesePhone;
+            
+            // ✅ CRITICAL: Update the phone we use for Supabase to match the Chinese one
+            finalUsedPhone = chinesePhone; 
+
         } catch (err2) {
             console.error("❌ Attempt 2 Failed:", err2.message);
             throw new Error("Registration System Unavailable. Please contact support.");
@@ -129,58 +173,54 @@ const verifyOTP = async () => {
       throw new Error(response ? response.msg : "Unknown Registration Error");
     }
 
-    console.log(`✅ Success! Registered as: ${usedPhoneForAutoGCM}`);
+    console.log(`✅ Success! Registered/Synced as: ${finalUsedPhone}`);
     localStorage.setItem("autogcmUser", JSON.stringify(response.data));
 
     statusMessage.value = t('otp.status_binding');
 
-    // 4. BIND GOOGLE ACCOUNT TO SUPABASE
-    // Retrieve the Google Info we saved in Login.vue
+    // 4. BIND TO SUPABASE
+    // ----------------------------------------------------------------
+    // Retrieve the Google Info (if they started with Google Login)
     const tempGoogleUser = JSON.parse(localStorage.getItem("tempGoogleUser") || "{}");
     const nameToUse = tempGoogleUser.nickname || "New User";
     const avatarToUse = tempGoogleUser.avatar || "";
     const emailToBind = tempGoogleUser.email || null;
 
-    // Pass emailToBind as the 4th argument
-    const supabaseUser = await getOrCreateUser(finalPhone, nameToUse, avatarToUse, emailToBind);
-    
-    if (emailToBind) {
-        console.log("🔗 Email sent to binding logic:", emailToBind);
-    }
+    // ✅ CRITICAL: We pass 'finalUsedPhone' here. 
+    // If Attempt 1 worked, it's '012...'. If Attempt 2 worked, it's '1012...'
+    const supabaseUser = await getOrCreateUser(finalUsedPhone, nameToUse, avatarToUse, emailToBind);
     
     // Clear temp data
     localStorage.removeItem("tempGoogleUser");
+    localStorage.removeItem("pendingPhone"); // Clear OTP phone
 
     // 5. Onboarding & Redirect Logic
+    // ----------------------------------------------------------------
     statusMessage.value = t('otp.status_finalizing'); 
-    await runOnboarding(finalPhone); 
+    await runOnboarding(finalUsedPhone); 
 
-    // ✅ CHECK LOCAL NAME STATUS (Supabase)
+    // CHECK LOCAL NAME STATUS (Supabase)
     const localName = supabaseUser?.nickname || "";
     const isLocalGeneric = 
         !localName || 
         localName === 'New User' || 
         localName === 'User' || 
         localName === 'RVM User' ||
-        localName === finalPhone;
+        localName === finalUsedPhone;
 
-    // ✅ CHECK VENDOR NAME STATUS (Machine API)
+    // CHECK VENDOR NAME STATUS (Machine API)
     const vendorName = response.data?.nikeName || "";
     const isVendorGeneric = 
         !vendorName || 
         vendorName === "User" || 
         vendorName === "RVM User";
 
-    // 🔴 REINFORCED DECISION LOGIC
-    // Go Home ONLY if:
-    // 1. User exists in Machine System (isNewUser === 0)
-    // 2. AND Local Name is NOT generic
-    // 3. AND Vendor Name is NOT generic (Double safety)
+    // DECISION LOGIC
     if (response.data.isNewUser === 0 && !isLocalGeneric && !isVendorGeneric) {
       router.push("/home-page");
     } else {
       // Profile is incomplete -> Go to Complete Profile
-      localStorage.setItem("pendingPhoneVerified", finalPhone);
+      localStorage.setItem("pendingPhoneVerified", finalUsedPhone);
       
       const legacyName = response.data?.nikeName || response.data?.name || '';
       

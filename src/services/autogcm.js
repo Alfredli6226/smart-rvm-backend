@@ -27,19 +27,17 @@ export async function syncUser(phone, nickname = undefined, avatarUrl = undefine
   // 1. Start with base payload
   const payload = { phone };
 
-  // 2. UPDATED LOGIC (REPLACE THIS BLOCK):
-  // If nickname is real, send it (Update Mode).
-  // If nickname is missing/generic, send "" (Fetch Mode) to satisfy API requirements.
+  // 2. Nickname Logic
   if (nickname && nickname.trim() !== "" && nickname !== "New User" && nickname !== "User") {
       payload.nikeName = nickname; 
   } else {
-      payload.nikeName = ""; // <--- CRITICAL FIX: Send empty string instead of undefined
+      payload.nikeName = ""; 
   }
 
-  // 3. ONLY add avatar if it exists
-  if (avatarUrl && avatarUrl.trim() !== "") {
-      payload.avatarUrl = avatarUrl;
-  }
+  // 🔴 FIX: FORCE Default Avatar for AutoGCM
+  // We ignore the 'avatarUrl' argument (which contains the Google Photo) 
+  // and send the clean default URL to the vendor.
+  payload.avatarUrl = "https://lassification.oss-cn-shenzhen.aliyuncs.com/static/mini/imgv3/head.png";
 
   // 4. Send Request
   return await callApi('/api/open/v1/user/account/sync', 'POST', payload);
