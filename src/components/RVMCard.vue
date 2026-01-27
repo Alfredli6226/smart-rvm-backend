@@ -1,5 +1,8 @@
 <template>
-  <div class="bg-white rounded-2xl shadow-sm overflow-hidden w-80 flex-shrink-0 mx-2 hover:shadow-lg transition border border-gray-100">
+  <div 
+    @click="$emit('click')"
+    class="bg-white rounded-2xl shadow-sm overflow-hidden w-80 flex-shrink-0 mx-2 hover:shadow-lg transition border border-gray-100 cursor-pointer active:scale-95 duration-200"
+  >
     
     <div class="relative">
       <img :src="image" alt="RVM Machine" class="w-full h-36 object-cover" />
@@ -27,6 +30,7 @@
              v-if="latitude && longitude"
              :href="`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`"
              target="_blank"
+             @click.stop
              class="flex items-center gap-1 bg-green-600 text-white text-[10px] px-3 py-1.5 rounded-full font-bold shadow-sm hover:bg-green-700 transition"
            >
              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -97,14 +101,12 @@ defineProps({
   longitude: [Number, String], 
 });
 
-// 1. Translate Machine Status (Online, Maintenance, etc)
 const translateStatus = (status) => {
   if (!status) return "";
-  const key = status.toLowerCase().replace(/\s+/g, '_'); // "Bin Full" -> "bin_full"
+  const key = status.toLowerCase().replace(/\s+/g, '_'); 
   return t(`rvm.status.${key}`);
 };
 
-// 2. Translate Waste Name (Paper, UCO, etc) - Same logic as Dashboard
 const translateWaste = (name) => {
   if (!name) return "";
   const key = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -112,10 +114,9 @@ const translateWaste = (name) => {
   return translated.includes('waste.') ? name : translated;
 };
 
-// 3. Translate Compartment State (Available, Bin Full)
 const translateState = (state) => {
   if (!state) return "";
-  const key = state.toLowerCase().replace(/\s+/g, '_'); // "Available" -> "available"
+  const key = state.toLowerCase().replace(/\s+/g, '_'); 
   return t(`rvm.state.${key}`);
 };
 </script>

@@ -9,6 +9,7 @@ import Homepage from "../pages/HomePage.vue";
 import Profile from "../pages/Profile.vue";
 import UserDashboard from "../pages/UserDashboard.vue";
 import WithdrawPage from "../pages/WithdrawPage.vue";
+import MachineDetailsPage from '../pages/MachineDetailsPage.vue';
 
 const routes = [
   { 
@@ -65,6 +66,10 @@ const routes = [
     path: "/withdraw", 
     component: WithdrawPage,
     meta: { title: 'Withdraw Funds' } 
+  },
+  { path: '/machine/:deviceNo', 
+    component: MachineDetailsPage, 
+    meta: { title: 'Machine Details' } 
   },
 ];
 

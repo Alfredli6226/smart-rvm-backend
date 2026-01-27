@@ -133,5 +133,17 @@
       "available": "可用",
       "bin_full": "满箱"
     }
+  },
+  "machine": {
+    "details_title": "机器控制",
+    "connecting": "正在连接机器...",
+    "unknown_location": "RVM 站点",
+    "select_door": "选择要打开的投口",
+    "tap_to_open": "点击打开",
+    "instruction": "请确保您位于机器前方后再进行操作。",
+    "confirm_title": "确认打开 {type}？",
+    "bin_full_msg": "暂停使用 (满箱)",
+    "open_success": "成功！投口已开启...",
+    "open_failed": "开启失败"
   }
 }

@@ -133,5 +133,17 @@
       "available": "Sedia",
       "bin_full": "Penuh"
     }
+  },
+  "machine": {
+    "details_title": "Kawalan Mesin",
+    "connecting": "Menyambung ke Mesin...",
+    "unknown_location": "Stesen RVM",
+    "select_door": "Pilih Pintu untuk Dibuka",
+    "tap_to_open": "Tekan untuk Buka",
+    "instruction": "Sila pastikan anda berada di hadapan mesin sebelum membuka.",
+    "confirm_title": "Buka pintu {type}?",
+    "bin_full_msg": "Tidak Tersedia (Penuh)",
+    "open_success": "Berjaya! Pintu dibuka...",
+    "open_failed": "Gagal membuka"
   }
 }

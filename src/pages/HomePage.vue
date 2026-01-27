@@ -78,6 +78,7 @@
             :compartments="rvm.compartments"
             :latitude="rvm.latitude"  
             :longitude="rvm.longitude"
+            @click="goToMachineDetails(rvm.deviceNo)"
           />
         </template>
 
@@ -99,9 +100,15 @@ import { Autoplay, Pagination } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/pagination";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 
 import { useHomeLogic } from "../composables/useHomeLogic.js";
 
 const { t } = useI18n();
 const { user, rvmList, sliderImages, isLoading } = useHomeLogic();
+
+const router = useRouter();
+const goToMachineDetails = (deviceNo) => {
+  router.push(`/machine/${deviceNo}`);
+};
 </script>
