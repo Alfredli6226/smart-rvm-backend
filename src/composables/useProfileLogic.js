@@ -157,16 +157,18 @@ export function useProfileLogic() {
                 });
 
                 if (financials) {
-                    // Calculate Spent (Same logic as Home Page)
-                    // We filter out 'EXTERNAL_SYNC' to avoid double-deducting migration adjustments
+                    // 1. Calculate Spent (Correctly ignore Rejected withdrawals)
                     const spent = (financials.withdrawals || [])
-                        .filter(w => w.status !== 'EXTERNAL_SYNC') 
+                        .filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC') 
                         .reduce((sum, w) => sum + Number(w.amount), 0);
 
-                    const lifetime = Number(dbUser.lifetime_integral || 0);
+                    // 2. Calculate Lifetime (Dynamically from history, like Home/Withdraw pages)
+                    // This ensures it catches your manual injections immediately
+                    const calculatedLifetime = (financials.submissions || [])
+                        .reduce((sum, s) => sum + Number(s.calculated_value || 0), 0);
                     
-                    // ✅ CORRECT MATH: Lifetime - Spent = Current Balance
-                    user.value.points = (lifetime - spent).toFixed(2);
+                    // 3. Final Balance
+                    user.value.points = (calculatedLifetime - spent).toFixed(2);
 
                     // Update Cache
                     localUser.cachedWeight = user.value.totalWeight;

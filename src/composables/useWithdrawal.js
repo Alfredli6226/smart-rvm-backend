@@ -1,8 +1,19 @@
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import { supabase, getOrCreateUser } from '../services/supabase'; 
 
 export function useWithdrawal(phone) {
   const loading = ref(false);
+  const route = useRoute();
+
+  // 1. Detect Nine App Logic
+  const isNineApp = computed(() => {
+    if (route.query.source === 'nineapp') {
+      localStorage.setItem('rvm_source', 'nineapp');
+      return true;
+    }
+    return localStorage.getItem('rvm_source') === 'nineapp';
+  });
   
   // Load Cache
   const localUser = JSON.parse(localStorage.getItem("autogcmUser") || "{}");
@@ -16,8 +27,11 @@ export function useWithdrawal(phone) {
   const fetchBalance = async () => {
     loading.value = true;
     try {
-      // 1. Get User ID (uses RPC internally now)
-      const dbUser = await getOrCreateUser(phone);
+      const currentName = localUser.nickname || localUser.name || localUser.nikeName || "User";
+      const currentAvatar = localUser.avatarUrl || localUser.avatar || "";
+
+      const dbUser = await getOrCreateUser(phone, currentName, currentAvatar);
+      
       if (!dbUser) throw new Error("User not found");
       userUuid.value = dbUser.id;
 
@@ -31,36 +45,43 @@ export function useWithdrawal(phone) {
       const earnings = data.submissions || [];
       const withdrawals = data.withdrawals || [];
 
-      // 3. Calculate Balances (Same logic as before, just using RPC data)
+      // 3. Calculate Balances (Updated to Global Logic)
       const balances = {};
+      
+      // A. Sum up ALL Earnings
       let totalLifetimeCalc = 0;
-
-      // Add Earnings
       earnings.forEach(item => {
         const mId = item.merchant_id;
         const pts = Number(item.calculated_value || 0);
+        
         if (!balances[mId]) balances[mId] = 0;
         balances[mId] += pts;
         totalLifetimeCalc += pts; 
       });
 
-      // Subtract Withdrawals
+      // B. Sum up ALL Withdrawals (Global Spent)
+      // We sum all approved/pending withdrawals regardless of which merchant they are tagged to.
+      let totalSpent = 0;
       withdrawals.forEach(item => {
+        if (item.status === 'REJECTED' || item.status === 'EXTERNAL_SYNC') return; // Ignore rejected
+        
+        // We still track per-merchant for the specific "Standard Withdrawal" logic
         const mId = item.merchant_id;
         const amt = Number(item.amount || 0);
-        if (balances[mId]) balances[mId] -= amt;
+        if (balances[mId] !== undefined) {
+             balances[mId] -= amt;
+        }
+        
+        totalSpent += amt;
       });
 
-      // Finalize Available Balance
-      let totalAvailable = 0;
-      for (const mId in balances) {
-        balances[mId] = Number(balances[mId].toFixed(2));
-        if (balances[mId] > 0) totalAvailable += balances[mId];
-        else balances[mId] = 0;
-      }
+      // C. Finalize Available Balance (Global Math)
+      // This ensures 10.31 (Earned) - 5.00 (Withdrawn) = 5.31 (Available), no matter what.
+      const finalBalance = totalLifetimeCalc - totalSpent;
 
-      merchantBalances.value = balances;
-      maxWithdrawal.value = totalAvailable.toFixed(2);
+      // Update State
+      merchantBalances.value = balances; // Keep this for backend logic
+      maxWithdrawal.value = finalBalance > 0 ? finalBalance.toFixed(2) : "0.00"; // ✅ Correct Global Balance
       withdrawalHistory.value = withdrawals;
       lifetimeEarnings.value = totalLifetimeCalc.toFixed(2);
 
@@ -126,7 +147,13 @@ export function useWithdrawal(phone) {
         if (remainingToWithdraw <= 0) break;
         if (balance <= 0) continue;
 
-        const takeAmount = Math.min(balance, remainingToWithdraw);
+        // 1. Calculate amount
+        let takeAmount = Math.min(balance, remainingToWithdraw);
+        
+        // 2. Clean the number (Fix the 0.310000005 bug)
+        takeAmount = Number(takeAmount.toFixed(2));
+
+        // 3. Add to list
         transactions.push({
           merchant_id: mId,
           amount: takeAmount,
@@ -134,7 +161,10 @@ export function useWithdrawal(phone) {
           account_number: bankDetails.accountNumber,
           account_holder_name: bankDetails.holderName
         });
+
+        // 4. Update remainder (and clean that too, just in case)
         remainingToWithdraw -= takeAmount;
+        remainingToWithdraw = Number(remainingToWithdraw.toFixed(2));
       }
 
       if (transactions.length > 0) {
@@ -156,5 +186,68 @@ export function useWithdrawal(phone) {
     }
   };
 
-  return { loading, maxWithdrawal, withdrawalHistory, lifetimeEarnings, fetchBalance, submitWithdrawal };
+  // 2. Mock Wavpay Logic (Now with Limits Enforced)
+  const submitWavpayMock = async (amount, identityNumber) => {
+    loading.value = true;
+    const reqAmount = Number(amount); // Ensure it's a number
+
+    try {
+        // --- A. VALIDATIONS (Copied from Standard Flow) ---
+        
+        // 1. Balance Check
+        if (reqAmount > Number(maxWithdrawal.value)) {
+            return { success: false, message: "Insufficient balance." };
+        }
+        
+        // 2. Min/Max Limits
+        if (reqAmount < 5) return { success: false, message: "Minimum withdrawal amount is 5 pts." };
+        if (reqAmount > 200) return { success: false, message: "Maximum single withdrawal is 200 pts." };
+
+        // 3. Daily Limit Check (300 pts)
+        const todayStr = new Date().toDateString();
+        const withdrawnToday = withdrawalHistory.value
+            .filter(w => {
+                const wDate = new Date(w.created_at).toDateString();
+                return wDate === todayStr && w.status !== 'REJECTED'; 
+            })
+            .reduce((sum, w) => sum + Number(w.amount), 0);
+
+        if ((withdrawnToday + reqAmount) > 300) {
+            const remaining = (300 - withdrawnToday).toFixed(2);
+            return { 
+                success: false, 
+                message: `Daily limit reached. You can only withdraw ${remaining > 0 ? remaining : 0} pts more.` 
+            };
+        }
+
+        // --- B. EXECUTION ---
+
+        // Call the Mock API
+        const response = await fetch('/api/test-disburse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userUuid.value,
+                amount: reqAmount,
+                ic_number: identityNumber,
+                items: merchantBalances.value 
+            })
+        });
+
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message);
+
+        await fetchBalance();
+        return { success: true, message: "Instant Auto-Credit Successful!" };
+
+    } catch (err) {
+        return { success: false, message: err.message || "Transfer failed" };
+    } finally {
+        loading.value = false;
+    }
+  };
+  
+  return { 
+    loading, maxWithdrawal, withdrawalHistory, lifetimeEarnings, fetchBalance, submitWithdrawal, isNineApp, submitWavpayMock 
+  };
 }

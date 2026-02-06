@@ -287,18 +287,22 @@ export function useHomeLogic() {
                 });
 
                 if (financials) {
+                    // 1. Calculate Spent (Exclude Rejected withdrawals if they exist)
                     const spent = (financials.withdrawals || [])
-                        .filter(w => w.status !== 'EXTERNAL_SYNC') 
+                        .filter(w => w.status !== 'REJECTED' && w.status !== 'EXTERNAL_SYNC') 
                         .reduce((sum, w) => sum + Number(w.amount), 0);
                     
+                    // 2. Calculate Pending
                     const pending = (financials.submissions || [])
                         .filter(s => s.status === 'PENDING')
                         .reduce((sum, s) => sum + Number(s.machine_given_points), 0);
 
-                    const lifetime = Number(dbUser.lifetime_integral || 0);
+                    const calculatedLifetime = (financials.submissions || [])
+                        .reduce((sum, s) => sum + Number(s.calculated_value || 0), 0);
                     
-                    user.value.balance = (lifetime - spent).toFixed(2);
+                    user.value.balance = (calculatedLifetime - spent).toFixed(2);
                     user.value.pendingEarnings = pending.toFixed(2);
+                    
                     updateCache();
                 }
                 updateCache();

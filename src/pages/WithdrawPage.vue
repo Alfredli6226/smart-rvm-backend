@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
 import { useWithdrawal } from '../composables/useWithdrawal';
-import { ArrowLeft } from 'lucide-vue-next';
+import { ArrowLeft, Wallet } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 import BaseModal from '../components/BaseModal.vue'; // Import Modal
 import { useI18n } from "vue-i18n";
@@ -12,13 +12,11 @@ const userPhone = localUser.phone;
 const router = useRouter();
 
 const { 
-  loading, 
-  maxWithdrawal, 
-  withdrawalHistory, 
-  lifetimeEarnings, 
-  fetchBalance, 
-  submitWithdrawal 
+  loading, maxWithdrawal, withdrawalHistory, lifetimeEarnings, fetchBalance, submitWithdrawal,
+  isNineApp, submitWavpayMock
 } = useWithdrawal(userPhone);
+
+const wavpayForm = ref({ amount: '', icNumber: '' });
 
 const form = ref({
   amount: '',
@@ -36,7 +34,7 @@ const bankList = [
   "Touch 'n Go eWallet", "DuitNow", "Other"
 ];
 
-// ✅ Modal State
+
 const modal = reactive({
     isOpen: false,
     isError: false,
@@ -97,6 +95,41 @@ const handleSubmit = async () => {
     showModal("Submission Failed", result.message, true); // Server errors usually stay in English or need backend translation
   }
 };
+
+
+const handleWavpaySubmit = async () => {
+    if (!wavpayForm.value.amount || !wavpayForm.value.icNumber) {
+        showModal("Error", "Please fill in all fields", true);
+        return;
+    }
+    const res = await submitWavpayMock(wavpayForm.value.amount, wavpayForm.value.icNumber);
+    
+    if (res.success) {
+        showModal("Success", res.message);
+        wavpayForm.value.amount = '';
+    } else {
+        showModal("Failed", res.message, true);
+    }
+};
+
+const formatMyKad = (event) => {
+  let val = event.target.value.replace(/\D/g, ''); // Remove all non-digits
+  
+  // Limit to 12 digits (MyKad length)
+  if (val.length > 12) val = val.slice(0, 12);
+
+  // Add first hyphen after 6 digits
+  if (val.length > 6) {
+    val = val.slice(0, 6) + '-' + val.slice(6);
+  }
+  // Add second hyphen after 8 digits (6 digits + 1 hyphen + 2 digits = 9 chars)
+  if (val.length > 9) {
+    val = val.slice(0, 9) + '-' + val.slice(9);
+  }
+
+  wavpayForm.value.icNumber = val;
+};
+
 </script>
 
 <template>
@@ -104,7 +137,9 @@ const handleSubmit = async () => {
       <button @click="router.back()" class="p-2 rounded-full bg-white text-gray-600 shadow-sm border border-gray-100 hover:bg-gray-50 active:scale-95 transition-all">
         <ArrowLeft :size="20" />
       </button>
-      <h1 class="text-xl font-bold text-gray-800">{{ t('withdraw.title') }}</h1>
+      <h1 class="text-xl font-bold text-gray-800">
+       {{ isNineApp ? 'Nine App Auto-Credit' : t('withdraw.title') }}
+      </h1>
     </div>
     
     <div class="bg-gradient-to-r from-blue-600 to-blue-500 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
@@ -124,8 +159,44 @@ const handleSubmit = async () => {
       </div>
     </div>
 
-    <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-      <h3 class="font-bold text-gray-900 mb-4">{{ t('withdraw.request_title') }}</h3>
+   <div v-if="isNineApp" class="bg-white rounded-xl p-6 shadow-sm border border-blue-200">
+    <div class="flex items-center gap-3 mb-6 p-3 bg-blue-50 rounded-lg text-blue-900">
+        <Wallet />
+        <div class="text-sm font-bold">Linked to Nine App Wallet</div>
+    </div>
+
+    <div class="space-y-4">
+        <div>
+            <label class="text-xs font-bold text-gray-500">Amount (RM)</label>
+            <input v-model="wavpayForm.amount" type="number" class="w-full p-3 bg-gray-50 rounded-lg outline-none" placeholder="0.00">
+            
+            <div class="mt-2 flex flex-col gap-1 text-[11px] text-gray-400 pl-1">
+               <p>• {{ t('withdraw.limit_min') }}: RM 5.00</p>
+               <p>• {{ t('withdraw.limit_max') }}: RM 200.00</p>
+               <p>• {{ t('withdraw.limit_daily') }}: RM 300.00</p>
+            </div>
+        </div>
+
+        <div>
+            <label class="text-xs font-bold text-gray-500">IC / Passport Number</label>
+            <input 
+                :value="wavpayForm.icNumber" 
+                @input="formatMyKad"
+                type="text" 
+                class="w-full p-3 bg-gray-50 rounded-lg outline-none" 
+                placeholder="e.g. 881010-01-xxxx"
+                maxlength="14"
+            >
+        </div>
+        
+        <button @click="handleWavpaySubmit" :disabled="loading" class="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">
+            {{ loading ? 'Processing...' : 'Confirm Auto Credit' }}
+        </button>
+    </div>
+</div>
+
+<div v-else class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+   <h3 class="font-bold text-gray-900 mb-4">{{ t('withdraw.request_title') }}</h3>
       
       <div class="space-y-4">
         <div>
@@ -139,7 +210,7 @@ const handleSubmit = async () => {
           <div class="mt-2 flex flex-col gap-1 text-[11px] text-gray-400 pl-1">
              <p>• {{ t('withdraw.limit_min') }}: RM 5.00</p>
              <p>• {{ t('withdraw.limit_max') }}: RM 200.00</p>
-             <p>• {{ t('withdraw.limit_daily') }}: RM 300.00</p>
+             <p>• {{ t('withdraw.limit_daily') }}: RM 200.00</p>
           </div>
         </div>
 
