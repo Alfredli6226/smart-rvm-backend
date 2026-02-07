@@ -131,7 +131,8 @@
     },
     "state": {
       "available": "可用",
-      "bin_full": "满箱"
+      "bin_full": "满箱",
+      "offline": "离线"
     }
   },
   "machine": {

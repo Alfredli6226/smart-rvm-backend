@@ -131,7 +131,8 @@
     },
     "state": {
       "available": "Sedia",
-      "bin_full": "Penuh"
+      "bin_full": "Penuh",
+      "offline": "Luar Talian"
     }
   },
   "machine": {

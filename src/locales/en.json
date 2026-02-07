@@ -132,7 +132,8 @@
     },
     "state": {
       "available": "Available",
-      "bin_full": "Bin Full"
+      "bin_full": "Bin Full",
+      "offline": "Offline"
     }
 },
 "machine": {
