@@ -81,24 +81,21 @@ export function useMerchants() {
       if (activeMerchantId) {
           // C. Assign NEW Machines (from Textarea)
           if (form.assignedMachines && form.assignedMachines.length > 0) {
-             const devices = form.assignedMachines.split(',').map((s: string) => s.trim()).filter((s: string) => s);
-             if (devices.length > 0) {
-                 // Assign them. Default rates 0.
-                 await supabase
-                    .from('machines')
-                    .update({ merchant_id: activeMerchantId })
-                    .in('device_no', devices);
-             }
+              const devices = form.assignedMachines.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+              if (devices.length > 0) {
+                  // Assign machines - this will assign them to this merchant
+                  await supabase
+                      .from('machines')
+                      .update({ merchant_id: activeMerchantId })
+                      .in('device_no', devices);
+              }
           }
 
           // D. Update Rates for EXISTING Machines (Per Machine Logic)
           if (form.machines && form.machines.length > 0) {
               for (const m of form.machines) {
-                  // If it's UCO, plastic/paper might be irrelevant, but harmless to save.
-                  // If it's RVM, UCO rate is irrelevant.
                   await supabase.from('machines').update({
                       rate_plastic: m.rate_plastic,
-                      rate_can: m.rate_plastic, // Sync Combo
                       rate_paper: m.rate_paper,
                       rate_uco: m.rate_uco
                   }).eq('device_no', m.device_no);
@@ -129,6 +126,51 @@ export function useMerchants() {
       return true;
   };
 
+  // 4. Delete Merchant (Client)
+  // Note: This requires CASCADE delete foreign keys to be set in the database
+  // Run fix_all_cascade_deletes.sql in Supabase to enable cascade deletes
+  const deleteMerchant = async (merchantId: string) => {
+      try {
+          // Let the database handle cascade delete (if foreign keys are set correctly)
+          const { error: mError } = await supabase.from('merchants').delete().eq('id', merchantId);
+          
+          if (mError) {
+              // If cascade delete isn't set up, try manual deletion
+              console.log("Cascade delete not available, trying manual deletion...");
+              
+              // Get all users for this merchant
+              const { data: merchantWallets } = await supabase
+                  .from('merchant_wallets')
+                  .select('user_id')
+                  .eq('merchant_id', merchantId);
+              const userIds = merchantWallets?.map(w => w.user_id) || [];
+
+              // Delete wallet_transactions for these users
+              if (userIds.length > 0) {
+                  await supabase.from('wallet_transactions').delete().in('user_id', userIds);
+              }
+              await supabase.from('wallet_transactions').delete().eq('merchant_id', merchantId);
+              await supabase.from('merchant_wallets').delete().eq('merchant_id', merchantId);
+              await supabase.from('app_admins').delete().eq('merchant_id', merchantId);
+              await supabase.from('machines').delete().eq('merchant_id', merchantId);
+              await supabase.from('withdrawals').delete().eq('merchant_id', merchantId);
+              await supabase.from('submission_reviews').delete().eq('merchant_id', merchantId);
+              await supabase.from('cleaning_records').delete().eq('merchant_id', merchantId);
+              await supabase.from('autogcm_records').delete().eq('merchant_id', merchantId);
+              
+              // Final attempt to delete merchant
+              const { error: retryError } = await supabase.from('merchants').delete().eq('id', merchantId);
+              if (retryError) throw retryError;
+          }
+
+          await fetchMerchants();
+          return { success: true };
+      } catch (err: any) {
+          console.error("Delete merchant error:", err);
+          return { success: false, message: err.message };
+      }
+  };
+
   // 4. Toggle Status
   const toggleStatus = async (merchant: AdminMerchant) => {
     try {
@@ -151,6 +193,7 @@ export function useMerchants() {
     fetchMerchants, 
     saveMerchant, 
     deleteMerchantAdmin,
+    deleteMerchant,
     toggleStatus 
   };
 }

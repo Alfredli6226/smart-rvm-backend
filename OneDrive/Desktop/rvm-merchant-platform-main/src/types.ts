@@ -7,8 +7,6 @@ export interface Merchant {
   name: string;
   currency_symbol: string;
   rate_plastic: number;
-  rate_can: number;
-  rate_glass: number;
   is_active: boolean;
   contact_email?: string;
   created_at: string;
@@ -47,6 +45,7 @@ export interface User {
   id: string;
   vendor_user_no?: string | null;
   phone: string;
+  email?: string | null;
   
   // Global stats (optional, as specific data is now in MerchantWallet)
   lifetime_integral: number;
@@ -65,6 +64,7 @@ export interface User {
 export interface UserProfile {
   nickname?: string;
   phone?: string;
+  email?: string;
   avatar_url?: string;
 }
 
@@ -111,7 +111,6 @@ export interface Machine {
   config_bin_1: string;
   config_bin_2: string;
   rate_plastic: number;
-  rate_can: number;
   rate_paper: number;
   rate_uco: number;
   

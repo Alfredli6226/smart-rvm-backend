@@ -262,6 +262,35 @@ export function useUserList() {
       }
   };
 
+  // 4. Delete User
+  const deleteUser = async (userId: string) => {
+      if (!userId) return { success: false, error: 'User ID is required' };
+      isSubmitting.value = true;
+      try {
+          // Delete related records first (cascading)
+          // Delete merchant_wallets
+          await supabase.from('merchant_wallets').delete().eq('user_id', userId);
+          // Delete withdrawals
+          await supabase.from('withdrawals').delete().eq('user_id', userId);
+          // Delete submission_reviews
+          await supabase.from('submission_reviews').delete().eq('user_id', userId);
+          // Delete wallet_transactions
+          await supabase.from('wallet_transactions').delete().eq('user_id', userId);
+          
+          // Finally delete the user
+          const { error: uError } = await supabase.from('users').delete().eq('id', userId);
+          if (uError) throw uError;
+
+          await fetchUsers();
+          return { success: true };
+      } catch (err: any) {
+          console.error('Delete failed:', err);
+          return { success: false, error: err.message };
+      } finally {
+          isSubmitting.value = false;
+      }
+  };
+
   onMounted(() => {
     fetchUsers();
   });
@@ -272,6 +301,7 @@ export function useUserList() {
       isSubmitting,
       fetchUsers, 
       adjustBalance, 
-      importUser 
+      importUser,
+      deleteUser
   };
 }

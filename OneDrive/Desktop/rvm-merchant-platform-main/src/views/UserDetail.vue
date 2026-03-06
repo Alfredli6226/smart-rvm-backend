@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue';
 import { useRoute, RouterLink } from 'vue-router';
 import { useUserProfile } from '../composables/useUserProfile'; 
-import { RefreshCw, ArrowLeft, CreditCard, Hash } from 'lucide-vue-next';
+import { RefreshCw, ArrowLeft, CreditCard, Hash, Mail } from 'lucide-vue-next';
 
 const route = useRoute();
 const activeTab = ref<'earned' | 'spent'>('earned');
@@ -50,6 +50,9 @@ const handleImageError = (e: Event) => {
                   <div class="flex items-center text-gray-500 text-sm mt-1">
                       <span class="font-mono bg-gray-100 px-2 py-0.5 rounded text-xs mr-2">{{ user.phone }}</span>
                       <span v-if="user.vendor_user_no" class="text-xs">Ext ID: {{ user.vendor_user_no }}</span>
+                  </div>
+                  <div v-if="user.email" class="flex items-center text-gray-400 text-sm mt-1">
+                      <Mail :size="12" class="mr-1.5" /> {{ user.email }}
                   </div>
               </div>
           </div>

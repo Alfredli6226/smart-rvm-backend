@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useUserList } from '../composables/useUserList';
-import { ChevronRight, Smartphone, Scale, Search, DownloadCloud, Wallet, ChevronLeft } from 'lucide-vue-next';
+import { ChevronRight, Smartphone, Scale, Search, DownloadCloud, Wallet, ChevronLeft, Mail } from 'lucide-vue-next';
 
 // Components
 import SimpleConfirmModal from '../components/SimpleConfirmModal.vue';
@@ -10,7 +10,7 @@ import UserAdjustBalanceModal from '../components/UserAdjustBalanceModal.vue';
 import UserCreateModal from '../components/UserCreateModal.vue';
 
 // Logic
-const { users, loading, isSubmitting, adjustBalance, importUser } = useUserList();
+const { users, loading, isSubmitting, adjustBalance, importUser, deleteUser } = useUserList();
 const searchQuery = ref('');
 
 // --- PAGINATION STATE ---
@@ -21,6 +21,7 @@ const itemsPerPage = ref(10);
 const showAdjustModal = ref(false);
 const showCreateModal = ref(false);
 const showFeedbackModal = ref(false);
+const showDeleteModal = ref(false);
 const selectedUser = ref<any>(null);
 
 // Feedback State
@@ -39,6 +40,23 @@ const triggerFeedback = (title: string, message: string, error = false) => {
 const openAdjustModal = (user: any) => {
     selectedUser.value = user;
     showAdjustModal.value = true;
+};
+
+const openDeleteModal = (user: any) => {
+    selectedUser.value = user;
+    showDeleteModal.value = true;
+};
+
+const handleDeleteConfirm = async () => {
+    if (!selectedUser.value) return;
+    const res = await deleteUser(selectedUser.value.id);
+    showDeleteModal.value = false;
+    selectedUser.value = null;
+    if (res?.success) {
+        triggerFeedback('Success', 'User deleted successfully!', false);
+    } else {
+        triggerFeedback('Error', res?.error || 'Delete failed', true);
+    }
 };
 
 const handleAdjustmentConfirm = async (payload: { userId: string, amount: number, note: string, type: 'ADJUSTMENT'|'WITHDRAWAL' }) => {
@@ -135,6 +153,7 @@ const handleImageError = (e: Event) => {
                         <th class="px-6 py-4 w-16">Avatar</th> 
                         <th class="px-6 py-4">Nickname</th>
                         <th class="px-6 py-4">Phone</th>
+                        <th class="px-6 py-4">Email</th>
                         <th class="px-6 py-4">Balance</th> 
                         <th class="px-6 py-4">Recycled</th>
                         <th class="px-6 py-4 text-right">Actions</th>
@@ -142,7 +161,7 @@ const handleImageError = (e: Event) => {
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     <tr v-if="filteredUsers.length === 0">
-                        <td colspan="6" class="px-6 py-8 text-center text-gray-400 text-sm">No users found.</td>
+                        <td colspan="7" class="px-6 py-8 text-center text-gray-400 text-sm">No users found.</td>
                     </tr>
                     <tr v-for="user in paginatedUsers" :key="user.id" class="hover:bg-gray-50/80 transition-colors">
                         <td class="px-6 py-4">
@@ -166,6 +185,11 @@ const handleImageError = (e: Event) => {
                             </div>
                         </td>
                         <td class="px-6 py-4">
+                            <div class="flex items-center text-sm text-gray-600 font-mono">
+                                <Mail :size="14" class="mr-1.5 text-gray-400" /> {{ user.email || '-' }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
                             <div class="flex items-center gap-2">
                                 <Wallet :size="16" class="text-purple-500" />
                                 <span class="font-bold text-gray-900">{{ user.balance.toFixed(2) }}</span>
@@ -179,6 +203,9 @@ const handleImageError = (e: Event) => {
                         <td class="px-6 py-4 text-right flex items-center justify-end gap-2">
                             <button @click="openAdjustModal(user)" class="text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg border border-purple-100 transition-colors">
                                 Adjust $
+                            </button>
+                            <button @click="openDeleteModal(user)" class="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg border border-red-100 transition-colors">
+                                Delete
                             </button>
                             <RouterLink :to="`/users/${user.id}`" class="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline decoration-blue-200 underline-offset-4 ml-2">
                                 View <ChevronRight :size="14" class="ml-0.5" />
@@ -234,6 +261,16 @@ const handleImageError = (e: Event) => {
         :isProcessing="false"
         @close="showFeedbackModal = false"
         @confirm="showFeedbackModal = false"
+    />
+
+    <SimpleConfirmModal
+        :isOpen="showDeleteModal"
+        title="Delete User"
+        :message="`Are you sure you want to delete ${selectedUser?.nickname || selectedUser?.phone || 'this user'}? This action cannot be undone and will remove all related data including wallet balances, withdrawals, and submission records.`"
+        :isProcessing="isSubmitting"
+        confirmText="Delete"
+        @close="showDeleteModal = false"
+        @confirm="handleDeleteConfirm"
     />
 
   </div>
