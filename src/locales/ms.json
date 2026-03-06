@@ -1,0 +1,150 @@
+{
+  "title": "Laman Kitar Semula Pintar",
+  "tagline": "Kitar semula dengan bijak, raih ganjaran",
+  "get_started_button": "Mula Sekarang",
+  "footer": "Dikuasakan oleh AutoGCM API Malaysia",
+
+  "login": {
+    "welcome": "Selamat Kembali",
+    "subtitle": "Log masuk untuk kitar semula dengan lebih bijak.",
+    "google_btn": "Log masuk dengan Google",
+    "signing_in": "Sedang log masuk...",
+    "terms": "Dengan log masuk, anda bersetuju dengan Terma dan Polisi Privasi kami."
+  },
+  "home": {
+    "hello": "Helo",
+    "ready": "Sedia untuk kitar semula?",
+    "total_weight": "Jumlah Berat Dihantar",
+    "balance": "Baki",
+    "pending": "tertangguh",
+    "nearby": "Stesen Berdekatan"
+  },
+  "nav": {
+    "home": "Utama",
+    "scan": "Imbas",
+    "profile": "Profil"
+  },
+  "phone": {
+    "title": "Sahkan Telefon Anda",
+    "subtitle": "Masukkan nombor telefon anda untuk teruskan.",
+    "label": "Nombor Telefon",
+    "button_send": "Hantar OTP"
+  },
+  "otp": {
+    "title": "Masukkan Kod Pengesahan",
+    "subtitle": "Kami telah menghantar kod 6 digit ke telefon anda.",
+    "button_verify": "Sahkan OTP",
+    "button_back": "Salah nombor? Kembali",
+    "status_verifying": "Mengesahkan Kod...",
+    "status_retrying": "Mencuba semula...",
+    "status_binding": "Mengikat Akaun...",
+    "status_finalizing": "Menyiapkan..."
+  },
+  "complete_profile": {
+    "title": "Lengkapkan Profil Anda",
+    "photo_label": "Foto dari Akaun anda",
+    "nickname_label": "Nama Panggilan",
+    "nickname_placeholder": "Masukkan nama panggilan",
+    "legacy_found": "Nama sedia ada dijumpai dari sistem lama",
+    "button": "Simpan & Teruskan"
+  },
+  "reg_complete": {
+    "title": "Pendaftaran Selesai",
+    "welcome": "Selamat Datang,",
+    "button_start": "Mula Kitar Semula"
+  },
+  "profile": {
+    "phone_not_set": "Telefon tidak ditetapkan",
+    "total_recycled": "Jumlah Kitar Semula",
+    "lifetime_points": "Mata Ganjaran Seumur Hidup",
+    "edit_profile": "Edit Profil",
+    "logout": "Log Keluar",
+    "logout_title": "Log Keluar?",
+    "logout_msg": "Adakah anda pasti mahu log keluar?",
+    "cancel": "Batal",
+    "confirm_logout": "Ya, Log Keluar",
+    "edit_title": "Edit Profil",
+    "nickname": "Nama Panggilan",
+    "enter_nickname": "Masukkan nama panggilan",
+    "select_avatar": "Pilih Avatar",
+    "save": "Simpan Perubahan",
+    "saving": "Menyimpan..."
+  },
+  "dashboard": {
+    "title": "Kitar Semula Saya",
+    "subtitle": "Kesan alam sekitar anda",
+    "kg_recycled": "KG Dikitar Semula",
+    "points_earned": "Mata Diperoleh",
+    "recent_activity": "Aktiviti Terkini",
+    "no_records": "Tiada rekod dijumpai.",
+    "start_prompt": "Lawati mesin untuk bermula!"
+  },
+  "withdraw": {
+    "title": "Tebus Mata",
+    "available": "Boleh Ditebus",
+    "lifetime": "Jumlah Seumur Hidup",
+    "reserved": "Diresabkan",
+    "request_title": "Permintaan Pengeluaran",
+    "amount": "Jumlah",
+    "enter_amount": "Masukkan mata untuk ditebus",
+    "limit_min": "Minimum",
+    "limit_max": "Maksimum setiap transaksi",
+    "limit_daily": "Had Harian",
+    "bank_name": "Nama Bank",
+    "select_bank": "Pilih Bank",
+    "type_bank": "Masukkan nama bank anda...",
+    "account_no": "No. Akaun",
+    "holder_name": "Nama Pemegang Akaun",
+    "holder_placeholder": "Nama Penuh seperti KP",
+    "submit": "Hantar Permintaan",
+    "processing": "Memproses...",
+    "history": "Sejarah",
+    "no_history": "Tiada sejarah pengeluaran.",
+    "success": "Berjaya!",
+    "success_msg": "Permintaan anda telah dihantar.",
+    "error_amount": "Jumlah Tidak Sah",
+    "error_amount_msg": "Sila masukkan jumlah yang sah.",
+    "error_bank": "Bank Tidak Dipilih",
+    "error_bank_msg": "Sila pilih bank.",
+    "error_details": "Butiran Tidak Lengkap",
+    "error_acc_msg": "Sila masukkan nombor akaun.",
+    "error_name_msg": "Sila masukkan nama pemegang.",
+    "modal_ok": "Okay, Faham"
+  },
+  "waste": {
+  "default": "Barang Kitar Semula",
+  "plastic_bottle": "Botol Plastik",
+  "aluminium_can": "Tin Aluminium",
+  "tin_can": "Tin Besi",
+  "bottle": "Botol",
+  "can": "Tin",
+  "uco": "Minyak Masak Terpakai",
+  "kertas": "Kertas",
+  "plastik_aluminium": "Plastik / Aluminium"
+},
+"rvm": {
+    "status": {
+      "online": "Dalam Talian",
+      "offline": "Luar Talian",
+      "maintenance": "Penyelenggaraan",
+      "bin_full": "Tong Penuh"
+    },
+    "state": {
+      "available": "Sedia",
+      "bin_full": "Penuh",
+      "offline": "Luar Talian"
+    }
+  },
+  "machine": {
+    "details_title": "Kawalan Mesin",
+    "connecting": "Menyambung ke Mesin...",
+    "unknown_location": "Stesen RVM",
+    "select_door": "Pilih Pintu untuk Dibuka",
+    "tap_to_open": "Tekan untuk Buka",
+    "instruction": "Sila pastikan anda berada di hadapan mesin sebelum membuka.",
+    "confirm_title": "Buka pintu {type}?",
+    "bin_full_msg": "Tidak Tersedia (Penuh)",
+    "open_success": "Berjaya! Pintu dibuka...",
+    "open_failed": "Gagal membuka"
+  }
+}

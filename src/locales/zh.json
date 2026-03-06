@@ -1,0 +1,150 @@
+{
+  "title": "智能回收系统",
+  "tagline": "智慧回收，赚取奖励",
+  "get_started_button": "开始使用",
+  "footer": "由 AutoGCM API 马来西亚提供支持",
+
+  "login": {
+    "welcome": "欢迎回来",
+    "subtitle": "登录以继续智能回收。",
+    "google_btn": "使用 Google 登录",
+    "signing_in": "登录中...",
+    "terms": "登录即表示您同意我们的条款和隐私政策。"
+  },
+  "home": {
+    "hello": "你好",
+    "ready": "准备好回收了吗？",
+    "total_weight": "累计回收重量",
+    "balance": "余额",
+    "pending": "待处理",
+    "nearby": "附近站点"
+  },
+  "nav": {
+    "home": "首页",
+    "scan": "扫描",
+    "profile": "我的"
+  },
+  "phone": {
+    "title": "验证您的手机",
+    "subtitle": "请输入您的手机号码以继续。",
+    "label": "手机号码",
+    "button_send": "发送验证码"
+  },
+  "otp": {
+    "title": "输入验证码",
+    "subtitle": "我们要向您的手机发送了6位数的代码。",
+    "button_verify": "验证",
+    "button_back": "号码错误？返回",
+    "status_verifying": "验证代码中...",
+    "status_retrying": "重试中...",
+    "status_binding": "绑定账户中...",
+    "status_finalizing": "完成中..."
+  },
+  "complete_profile": {
+    "title": "完善您的个人资料",
+    "photo_label": "来自您账户的照片",
+    "nickname_label": "昵称",
+    "nickname_placeholder": "输入昵称",
+    "legacy_found": "发现旧系统中的现有名称",
+    "button": "保存并继续"
+  },
+  "reg_complete": {
+    "title": "注册完成",
+    "welcome": "欢迎，",
+    "button_start": "开始回收"
+  },
+  "profile": {
+    "phone_not_set": "未设置手机号",
+    "total_recycled": "回收总量",
+    "lifetime_points": "终身奖励积分",
+    "edit_profile": "编辑资料",
+    "logout": "退出登录",
+    "logout_title": "退出？",
+    "logout_msg": "您确定要退出当前账户吗？",
+    "cancel": "取消",
+    "confirm_logout": "是的，退出",
+    "edit_title": "编辑资料",
+    "nickname": "昵称",
+    "enter_nickname": "输入新昵称",
+    "select_avatar": "选择头像",
+    "save": "保存更改",
+    "saving": "保存中..."
+  },
+  "dashboard": {
+    "title": "我的回收",
+    "subtitle": "您的环保贡献",
+    "kg_recycled": "回收公斤数",
+    "points_earned": "获得积分",
+    "recent_activity": "近期活动",
+    "no_records": "暂无回收记录。",
+    "start_prompt": "前往机器开始回收！"
+  },
+  "withdraw": {
+    "title": "积分提现",
+    "available": "可提现余额",
+    "lifetime": "终身累计",
+    "reserved": "保留中",
+    "request_title": "申请提现",
+    "amount": "金额",
+    "enter_amount": "输入提现积分",
+    "limit_min": "最低",
+    "limit_max": "单笔上限",
+    "limit_daily": "每日上限",
+    "bank_name": "银行名称",
+    "select_bank": "选择银行",
+    "type_bank": "输入您的银行名称...",
+    "account_no": "账号",
+    "holder_name": "持卡人姓名",
+    "holder_placeholder": "身份证全名",
+    "submit": "提交申请",
+    "processing": "处理中...",
+    "history": "历史记录",
+    "no_history": "暂无提现记录。",
+    "success": "成功！",
+    "success_msg": "您的提现申请已提交。",
+    "error_amount": "金额无效",
+    "error_amount_msg": "请输入有效的金额。",
+    "error_bank": "未选择银行",
+    "error_bank_msg": "请选择一家银行。",
+    "error_details": "信息缺失",
+    "error_acc_msg": "请输入账号。",
+    "error_name_msg": "请输入持卡人姓名。",
+    "modal_ok": "好的，知道了"
+  },
+  "waste": {
+  "default": "回收物品",
+  "plastic_bottle": "塑料瓶",
+  "aluminium_can": "铝罐",
+  "tin_can": "铁罐",
+  "bottle": "瓶子",
+  "can": "罐子",
+  "uco": "废弃食用油",
+  "kertas": "纸张",
+  "plastik_aluminium": "塑料 / 铝罐"
+},
+"rvm": {
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "maintenance": "维护中",
+      "bin_full": "满箱"
+    },
+    "state": {
+      "available": "可用",
+      "bin_full": "满箱",
+      "offline": "离线"
+    }
+  },
+  "machine": {
+    "details_title": "机器控制",
+    "connecting": "正在连接机器...",
+    "unknown_location": "RVM 站点",
+    "select_door": "选择要打开的投口",
+    "tap_to_open": "点击打开",
+    "instruction": "请确保您位于机器前方后再进行操作。",
+    "confirm_title": "确认打开 {type}？",
+    "bin_full_msg": "暂停使用 (满箱)",
+    "open_success": "成功！投口已开启...",
+    "open_failed": "开启失败"
+  }
+}
