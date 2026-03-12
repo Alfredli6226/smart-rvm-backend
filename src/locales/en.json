@@ -1,0 +1,151 @@
+{
+  "title": "Smart Recycle Web",
+  "tagline": "Recycle Smart, Earn Rewards",
+  "get_started_button": "Get Started",
+  "footer": "Powered by AutoGCM API Malaysia",
+  
+  "login": {
+    "welcome": "Welcome Back",
+    "subtitle": "Login to continue recycling smarter.",
+    "google_btn": "Sign in with Google",
+    "signing_in": "Signing in...",
+    "terms": "By signing in, you agree to our Terms and Privacy Policy."
+  },
+  "home": {
+    "hello": "Hello",
+    "ready": "Ready to recycle?",
+    "total_weight": "Total Delivered Weight",
+    "balance": "Balance",
+    "pending": "pending",
+    "nearby": "Nearby Stations"
+  },
+  "nav": {
+    "home": "Home",
+    "scan": "Scan",
+    "profile": "Profile"
+  },
+  "phone": {
+    "title": "Verify Your Phone",
+    "subtitle": "Enter your phone number to continue.",
+    "label": "Phone Number",
+    "button_send": "Send OTP"
+  },
+  "otp": {
+    "title": "Enter Verification Code",
+    "subtitle": "We have sent a 6-digit code to your phone.",
+    "button_verify": "Verify OTP",
+    "button_back": "Wrong number? Go back",
+    "status_verifying": "Verifying Code...",
+    "status_retrying": "Retrying...",
+    "status_binding": "Binding Account...",
+    "status_finalizing": "Finalizing..."
+  },
+  "complete_profile": {
+    "title": "Complete Your Profile",
+    "photo_label": "Photo from your Account",
+    "nickname_label": "Nickname",
+    "nickname_placeholder": "Enter nickname",
+    "legacy_found": "Found existing name from old system",
+    "button": "Save & Continue"
+  },
+  "reg_complete": {
+    "title": "Registration Complete",
+    "welcome": "Welcome,",
+    "button_start": "Start Recycling"
+  },
+  "profile": {
+    "phone_not_set": "Phone not set",
+    "total_recycled": "Total Recycled",
+    "lifetime_points": "Lifetime Reward Points",
+    "edit_profile": "Edit Profile",
+    "logout": "Logout",
+    "logout_title": "Log Out?",
+    "logout_msg": "Are you sure you want to sign out?",
+    "cancel": "Cancel",
+    "confirm_logout": "Yes, Logout",
+    "edit_title": "Edit Profile",
+    "nickname": "Nickname",
+    "enter_nickname": "Enter new nickname",
+    "select_avatar": "Select Avatar",
+    "save": "Save Changes",
+    "saving": "Saving..."
+  },
+  "dashboard": {
+    "title": "My Recycling",
+    "subtitle": "Your environmental impact",
+    "kg_recycled": "KG Recycled",
+    "points_earned": "Points Earned",
+    "recent_activity": "Recent Activity",
+    "no_records": "No recycling records found yet.",
+    "start_prompt": "Visit a machine to get started!"
+  },
+  "withdraw": {
+    "title": "Withdraw Points",
+    "available": "Available to Withdraw",
+    "lifetime": "Total Lifetime",
+    "reserved": "Reserved",
+    "request_title": "Request Withdrawal",
+    "amount": "Amount",
+    "enter_amount": "Enter points to withdraw",
+    "limit_min": "Minimum",
+    "limit_max": "Max per transaction",
+    "limit_daily": "Daily Limit",
+    "bank_name": "Bank Name",
+    "select_bank": "Select Bank",
+    "type_bank": "Type your bank name...",
+    "account_no": "Account No.",
+    "holder_name": "Account Holder Name",
+    "holder_placeholder": "Full Name per IC",
+    "submit": "Submit Request",
+    "processing": "Processing...",
+    "history": "History",
+    "no_history": "No withdrawal history yet.",
+    "success": "Success!",
+    "success_msg": "Your withdrawal request has been submitted.",
+    "error_amount": "Invalid Amount",
+    "error_amount_msg": "Please enter a valid amount.",
+    "error_bank": "Missing Bank",
+    "error_bank_msg": "Please select a bank.",
+    "error_details": "Missing Details",
+    "error_acc_msg": "Please enter account number.",
+    "error_name_msg": "Please enter holder name.",
+    "modal_ok": "Okay, Got it"
+  },
+  "waste": {
+  "default": "Recycling Item",
+  "plastic_bottle": "Plastic Bottle",
+  "aluminium_can": "Aluminium Can",
+  "tin_can": "Tin Can",
+  "paper": "Paper",
+  "bottle": "Bottle",
+  "can": "Can",
+  "uco": "Used Cooking Oil",
+  "kertas": "Paper",
+  "plastik_aluminium": "Plastic / Aluminium"
+},
+"rvm": {
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "maintenance": "Maintenance",
+      "bin_full": "Bin Full"
+    },
+    "state": {
+      "available": "Available",
+      "bin_full": "Bin Full",
+      "offline": "Offline"
+    }
+},
+"machine": {
+    "details_title": "Machine Control",
+    "connecting": "Connecting to Machine...",
+    "unknown_location": "RVM Station",
+    "select_door": "Select Door to Unlock",
+    "tap_to_open": "Tap to Open",
+    "instruction": "Please ensure you are standing in front of the machine before unlocking.",
+    "confirm_title": "Open {type} door?",
+    "bin_full_msg": "Full / Unavailable",
+    "open_success": "Success! Door is opening...",
+    "open_failed": "Failed to open door"
+  }
+}
