@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { Building2, UserPlus, MonitorSmartphone, User, ChevronDown, Columns, X, Trash2 } from 'lucide-vue-next';
+import { Building2, UserPlus, MonitorSmartphone, User, ChevronDown, Columns, X } from 'lucide-vue-next';
 import { useMerchants, type AdminMerchant } from '../../composables/useMerchants';
 import { supabase } from '../../services/supabase';
 import MerchantModal from '../../components/MerchantModal.vue';

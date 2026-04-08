@@ -6,10 +6,10 @@ import { storeToRefs } from 'pinia';
 import { 
   AlertCircle, Server, Coins, Scale, Activity, 
   Recycle, Brush, CheckCircle2, BarChart3, AlertTriangle,
-  WifiOff, Printer, Package, Clock, CheckCircle,
-  QrCode, Wrench, ChevronRight, X, Eye, EyeOff,
-  ClipboardList, Bell, Trash2, Wifi, Zap, Gauge,
-  Target, TrendingUp, Clock3, Calendar, Truck, RefreshCw
+  Printer, Package, Clock, CheckCircle,
+  QrCode, Wrench, ChevronRight, X, Eye,
+  ClipboardList, Bell, Trash2, Wifi, Gauge,
+  Target, Clock3, Calendar, Truck, RefreshCw
 } from 'lucide-vue-next';
 import StatsCard from '../components/StatsCard.vue';
 import { useRouter } from 'vue-router';
@@ -20,7 +20,7 @@ import { supabase } from '../services/supabase';
 const router = useRouter();
 const machineStore = useMachineStore();
 const auth = useAuthStore();
-const { machines, loading: machineLoading, viewerHasAssignments } = storeToRefs(machineStore);
+const { machines, loading: machineLoading } = storeToRefs(machineStore);
 
 const { 
   loading: statsLoading, 
@@ -28,7 +28,6 @@ const {
   totalPoints, 
   totalWeight, 
   recentWithdrawals,
-  recentSubmissions, 
   recentCleaning,   
   fetchStats 
 } = useDashboardStats();
@@ -49,10 +48,6 @@ const isViewer = computed(() => {
 
 // Collector-specific state
 const isCollector = computed(() => {
-  // Check if route has forceCollectorView meta flag
-  const route = window.location.pathname;
-  if (route.includes('collector-dashboard')) return true;
-  // Check for COLLECTOR role (case-insensitive)
   return auth.role?.toUpperCase() === 'COLLECTOR';
 });
 
@@ -60,7 +55,7 @@ const isCollector = computed(() => {
 const collectorTasks = ref<any[]>([]);
 const pendingVerifications = ref<any[]>([]);
 const collectionStats = ref({ todayWeight: 0, rejectedCount: 0, collectedCount: 0 });
-const showQuickActions = ref(false);
+const offloadingTruck = ref(false);
 const showReportIssueModal = ref(false);
 const issueDescription = ref('');
 const issueMachineId = ref<number | null>(null);
@@ -108,7 +103,8 @@ const urgencyLevels = [
 // Collector - Route & Logistics
 const nextCollectionPoint = ref<any>(null);
 const estimatedRouteTime = ref(0); // minutes
-const vehicleStatus = ref('Ready'); // Ready, On Route, Maintenance
+// Vehicle status for collectors (Ready, On Route, Maintenance)
+const vehicleStatus = ref('Ready');
 
 // Collector - Operational Health
 const lowPaperMachines = ref<any[]>([]);
@@ -276,7 +272,7 @@ const fetchCriticalAlerts = async () => {
   // Sort by severity (critical first) then by time
   const severityOrder: Record<string, number> = { critical: 0, warning: 1 };
   criticalAlerts.value = alerts.sort((a, b) => {
-    const severityDiff = severityOrder[a.severity] - severityOrder[b.severity];
+    const severityDiff = (severityOrder[a.severity] ?? 2) - (severityOrder[b.severity] ?? 2);
     if (severityDiff !== 0) return severityDiff;
     return new Date(b.time).getTime() - new Date(a.time).getTime();
   }).slice(0, 9);
@@ -379,6 +375,13 @@ const fetchDailyStats = async () => {
 const submitIssue = async () => {
   if (!issueDescription.value || !issueMachineId.value || !issueCategory.value) return;
   
+  // Security check: Ensure the selected machine is in agent's assigned machines
+  const assignedMachineIds = machines.value.map(m => m.id);
+  if (!assignedMachineIds.includes(issueMachineId.value)) {
+    alert('You can only report issues for machines assigned to you.');
+    return;
+  }
+  
   submittingIssue.value = true;
   
   try {
@@ -407,11 +410,15 @@ const submitIssue = async () => {
     const reporterEmail = auth.user?.email;
     if (reporterEmail) {
       const machineName = machine?.name || machine?.deviceNo || 'Unknown';
+      const insertedId = data?.[0]?.id;
       await supabase.from('notifications').insert({
         user_email: reporterEmail,
         title: 'Issue Reported',
         message: `Your issue for ${machineName} has been submitted and is awaiting review.`,
-        is_read: false
+        is_read: false,
+        reference_id: insertedId || null,
+        reference_type: 'issue_reported',
+        type: 'WARNING'
       });
     }
     

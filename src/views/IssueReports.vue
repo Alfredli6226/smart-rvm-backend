@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { useAuthStore } from '../stores/auth';
 import { supabase } from '../services/supabase';
 import { 
-  AlertCircle, Search, CheckCircle, XCircle, 
-  Clock, Trash2, User, Server, RefreshCw, Filter
+  AlertCircle, Search, CheckCircle, 
+  Clock, User, Server, RefreshCw, Filter
 } from 'lucide-vue-next';
 
-const auth = useAuthStore();
 const loading = ref(false);
 const records = ref<any[]>([]);
 const searchTerm = ref('');
@@ -109,33 +107,50 @@ const updateStatus = async (id: string, newStatus: string) => {
     
     console.log('Status updated successfully');
     
-    // If status is being set to RESOLVED and there was a creator, send notification
-    if (newStatus === 'RESOLVED' && recordData?.created_by) {
-      const notificationTitle = 'Issue Resolved';
-      const notificationMessage = `Your reported issue for machine ${recordData.device_no || 'N/A'} has been resolved.`;
+    // Send notification based on status change
+    if (recordData?.created_by && newStatus) {
+      let notificationTitle = '';
+      let notificationMessage = '';
+      let referenceType = '';
       
-      console.log('Sending notification to:', recordData.created_by);
+      if (newStatus === 'ISSUE_REPORTED') {
+        notificationTitle = 'Issue Received';
+        notificationMessage = `Your reported issue for machine ${recordData.device_no || 'N/A'} has been received and is awaiting review.`;
+        referenceType = 'issue_reported';
+      } else if (newStatus === 'IN_PROGRESS') {
+        notificationTitle = 'Issue In Progress';
+        notificationMessage = `Your reported issue for machine ${recordData.device_no || 'N/A'} is now being worked on.`;
+        referenceType = 'issue_in_progress';
+      } else if (newStatus === 'RESOLVED') {
+        notificationTitle = 'Issue Resolved';
+        notificationMessage = `Your reported issue for machine ${recordData.device_no || 'N/A'} has been resolved.`;
+        referenceType = 'issue_resolved';
+      }
       
-      const { error: notifyError } = await supabase
-        .from('notifications')
-        .insert({
-          user_email: recordData.created_by,
-          title: notificationTitle,
-          message: notificationMessage,
-          type: 'SUCCESS',
-          reference_id: id,
-          reference_type: 'issue_resolved'
-        });
-      
-      if (notifyError) {
-        console.error('Error sending notification:', notifyError);
-        alert(`Status updated to RESOLVED. Note: Could not send notification - ${notifyError.message}`);
-      } else {
-        console.log('Notification sent successfully to:', recordData.created_by);
-        alert(`Status updated to RESOLVED. Notification sent to: ${recordData.created_by}`);
+      if (notificationTitle) {
+        console.log('Sending notification to:', recordData.created_by);
+        
+        const { error: notifyError } = await supabase
+          .from('notifications')
+          .insert({
+            user_email: recordData.created_by,
+            title: notificationTitle,
+            message: notificationMessage,
+            type: newStatus === 'RESOLVED' ? 'SUCCESS' : newStatus === 'ISSUE_REPORTED' ? 'WARNING' : 'INFO',
+            reference_id: id,
+            reference_type: referenceType
+          });
+        
+        if (notifyError) {
+          console.error('Error sending notification:', notifyError);
+          alert(`Status updated to ${newStatus}. Note: Could not send notification - ${notifyError.message}`);
+        } else {
+          console.log('Notification sent successfully to:', recordData.created_by);
+          alert(`Status updated to ${newStatus}. Notification sent to: ${recordData.created_by}`);
+        }
       }
     } else {
-      alert('Status updated to RESOLVED successfully!');
+      alert(`Status updated to ${newStatus} successfully!`);
     }
     
     await fetchIssueReports();

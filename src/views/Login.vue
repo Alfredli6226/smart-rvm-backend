@@ -14,6 +14,7 @@ const router = useRouter();
 const auth = useAuthStore();
 
 // Safe router push function to prevent errors
+// Reserved for future use - router helper
 const safePush = (path: string) => {
   if (router) {
     router.push(path);

@@ -1,20 +1,42 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { supabase } from '../services/supabase';
 import { notificationCount, useNotifications } from '../composables/useNotifications';
 import { 
   Bell, CheckCircle, AlertCircle, Info, 
-  Clock, Trash2, Check, RefreshCw
+  Clock, Trash2, Check, RefreshCw, Filter
 } from 'lucide-vue-next';
 
 const auth = useAuthStore();
-const { fetchUnreadCount } = useNotifications();
+useNotifications();
 const loading = ref(false);
 const notifications = ref<any[]>([]);
+const statusFilter = ref('');
+let refreshInterval: ReturnType<typeof setInterval> | null = null;
+
+// Check if user is Agent or Collector
+const isAgent = computed(() => auth.role === 'AGENT');
+const isCollector = computed(() => auth.role === 'COLLECTOR');
+const isAgentOrCollector = computed(() => isAgent.value || isCollector.value);
 
 const unreadCount = computed(() => {
-  return notifications.value.filter(n => !n.is_read).length;
+  return filteredNotifications.value.filter(n => !n.is_read).length;
+});
+
+// Filter notifications based on status filter (for agents/collectors)
+const filteredNotifications = computed(() => {
+  if (!statusFilter.value) return notifications.value;
+  return notifications.value.filter(n => {
+    if (statusFilter.value === 'ISSUE_REPORTED') {
+      return n.reference_type === 'issue_reported';
+    } else if (statusFilter.value === 'IN_PROGRESS') {
+      return n.reference_type === 'issue_in_progress';
+    } else if (statusFilter.value === 'RESOLVED') {
+      return n.reference_type === 'issue_resolved';
+    }
+    return true;
+  });
 });
 
 const fetchNotifications = async () => {
@@ -117,23 +139,51 @@ const deleteNotification = async (id: string) => {
   }
 };
 
-const getTypeIcon = (type: string) => {
-  switch (type) {
+const getTypeIcon = (notification: any) => {
+  // First check reference_type for issue-specific notifications
+  if (notification.reference_type === 'issue_in_progress') {
+    return Clock;
+  }
+  if (notification.reference_type === 'issue_resolved') {
+    return CheckCircle;
+  }
+  if (notification.reference_type === 'issue_reported') {
+    return AlertCircle;
+  }
+  
+  // Fall back to type-based icons
+  switch (notification.type) {
     case 'SUCCESS':
       return CheckCircle;
     case 'ERROR':
+      return AlertCircle;
+    case 'WARNING':
       return AlertCircle;
     default:
       return Info;
   }
 };
 
-const getTypeColor = (type: string) => {
-  switch (type) {
+const getTypeColor = (notification: any) => {
+  // First check reference_type for issue-specific notifications
+  if (notification.reference_type === 'issue_in_progress') {
+    return 'bg-amber-100 text-amber-600';
+  }
+  if (notification.reference_type === 'issue_resolved') {
+    return 'bg-green-100 text-green-600';
+  }
+  if (notification.reference_type === 'issue_reported') {
+    return 'bg-red-100 text-red-600';
+  }
+  
+  // Fall back to type-based colors
+  switch (notification.type) {
     case 'SUCCESS':
       return 'bg-green-100 text-green-600';
     case 'ERROR':
       return 'bg-red-100 text-red-600';
+    case 'WARNING':
+      return 'bg-amber-100 text-amber-600';
     default:
       return 'bg-blue-100 text-blue-600';
   }
@@ -162,6 +212,16 @@ const formatDate = (dateStr: string) => {
 
 onMounted(() => {
   fetchNotifications();
+  // Auto-refresh every 10 seconds
+  refreshInterval = setInterval(() => {
+    fetchNotifications();
+  }, 10000);
+});
+
+onUnmounted(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+  }
 });
 </script>
 
@@ -194,6 +254,25 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- Filter for Agents/Collectors -->
+    <div v-if="isAgentOrCollector" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
+      <div class="flex flex-wrap gap-4 items-center">
+        <div class="flex items-center gap-2">
+          <Filter :size="18" class="text-gray-400"/>
+          <span class="text-sm font-semibold text-gray-700">Filter by Status:</span>
+        </div>
+        <select 
+          v-model="statusFilter"
+          class="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Notifications</option>
+          <option value="ISSUE_REPORTED">Reported</option>
+          <option value="IN_PROGRESS">In Progress</option>
+          <option value="RESOLVED">Resolved</option>
+        </select>
+      </div>
+    </div>
+
     <!-- Stats -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
       <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -202,8 +281,8 @@ onMounted(() => {
             <Bell :size="20"/>
           </div>
           <div>
-            <p class="text-2xl font-bold text-gray-900">{{ notifications.length }}</p>
-            <p class="text-sm text-gray-500">Total Notifications</p>
+            <p class="text-2xl font-bold text-gray-900">{{ filteredNotifications.length }}</p>
+            <p class="text-sm text-gray-500">{{ statusFilter ? 'Filtered' : 'Total' }} Notifications</p>
           </div>
         </div>
       </div>
@@ -228,15 +307,15 @@ onMounted(() => {
         <p class="mt-2 text-gray-500">Loading...</p>
       </div>
       
-      <div v-else-if="notifications.length === 0" class="p-8 text-center">
+      <div v-else-if="filteredNotifications.length === 0" class="p-8 text-center">
         <Bell :size="48" class="mx-auto text-gray-300 mb-4"/>
-        <p class="text-gray-500">No notifications yet</p>
+        <p class="text-gray-500">No notifications{{ statusFilter ? ' for selected filter' : '' }} yet</p>
         <p class="text-xs text-gray-400 mt-2">You'll receive notifications when your reported issues are resolved</p>
       </div>
       
       <div v-else class="divide-y divide-gray-100">
         <div 
-          v-for="notification in notifications" 
+          v-for="notification in filteredNotifications" 
           :key="notification.id"
           class="p-4 hover:bg-gray-50 transition flex items-start gap-4"
           :class="{ 'bg-blue-50/50': !notification.is_read }"
@@ -244,9 +323,9 @@ onMounted(() => {
           <!-- Icon -->
           <div 
             class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-            :class="getTypeColor(notification.type)"
+            :class="getTypeColor(notification)"
           >
-            <component :is="getTypeIcon(notification.type)" :size="20"/>
+            <component :is="getTypeIcon(notification)" :size="20"/>
           </div>
           
           <!-- Content -->
