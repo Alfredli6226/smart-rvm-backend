@@ -1,25 +1,108 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useCustomerService } from '../composables/useCustomerService';
+import { useAICustomerService } from '../composables/useAICustomerService';
+import { useTelegramAlerts } from '../services/telegramAlerts';
 
 const route = useRoute();
 const { selectedTicket, messages, loading, usingMock, loadTicket, loadMessages, updateTicket, addMessage } = useCustomerService();
+const { generateSummary, generateSuggestedReply, generateRecommendedAction, loadSuggestions, suggestions, loading: aiLoading } = useAICustomerService();
+const { shouldAlertForTicket, alertCriticalTicket, alertEscalation } = useTelegramAlerts();
+
 const reply = ref('');
 const internal = ref(false);
+const showAIPanel = ref(true);
+const aiSuggestedReply = ref('');
+const aiRecommendedAction = ref('');
+const isGeneratingAI = ref(false);
 
 const ticketId = route.params.id as string;
 
 const sendReply = async () => {
   if (!reply.value.trim()) return;
-  await addMessage(ticketId, { sender_type: internal.value ? 'agent' : 'agent', sender_name: internal.value ? 'Staff Note' : 'AI Assistant', content: reply.value.trim(), message_type: 'message', read_by_agent: true, read_by_customer: false, is_internal: internal.value });
+  await addMessage(ticketId, { 
+    sender_type: internal.value ? 'agent' : 'agent', 
+    sender_name: internal.value ? 'Staff Note' : 'Support Agent', 
+    content: reply.value.trim(), 
+    message_type: 'message', 
+    read_by_agent: true, 
+    read_by_customer: false, 
+    is_internal: internal.value 
+  });
   reply.value = '';
   internal.value = false;
 };
 
+const useAISuggestion = () => {
+  reply.value = aiSuggestedReply.value;
+};
+
+const generateAISummary = async () => {
+  if (!selectedTicket.value) return;
+  isGeneratingAI.value = true;
+  try {
+    const summary = await generateSummary(ticketId, messages.value);
+    await updateTicket(ticketId, { ai_summary: summary });
+  } finally {
+    isGeneratingAI.value = false;
+  }
+};
+
+const generateAISuggestion = async () => {
+  if (!selectedTicket.value) return;
+  isGeneratingAI.value = true;
+  try {
+    aiSuggestedReply.value = await generateSuggestedReply(ticketId, selectedTicket.value, messages.value);
+    aiRecommendedAction.value = await generateRecommendedAction(selectedTicket.value, messages.value);
+  } finally {
+    isGeneratingAI.value = false;
+  }
+};
+
+const checkForAlerts = async () => {
+  if (!selectedTicket.value) return;
+  
+  // Check if this ticket should trigger Telegram alerts
+  if (shouldAlertForTicket(selectedTicket.value)) {
+    const dashboardUrl = `${window.location.origin}/customer-service/${ticketId}`;
+    await alertCriticalTicket(selectedTicket.value, dashboardUrl);
+  }
+};
+
+const escalateTicket = async (reason: string) => {
+  if (!selectedTicket.value) return;
+  
+  await updateTicket(ticketId, { 
+    status: 'Escalated' as any,
+    priority: 'Critical',
+    ai_escalation_reason: reason
+  });
+  
+  const dashboardUrl = `${window.location.origin}/customer-service/${ticketId}`;
+  await alertEscalation(selectedTicket.value, reason, dashboardUrl);
+};
+
+const escalationReasons = [
+  'Technical issue requires engineering',
+  'Customer dissatisfaction',
+  'Legal/compliance concern',
+  'High-value account issue',
+  'Multiple failed resolutions'
+];
+
 onMounted(async () => {
   await loadTicket(ticketId);
   await loadMessages(ticketId);
+  await loadSuggestions(ticketId);
+  
+  // Auto-generate AI suggestions if ticket is new
+  if (selectedTicket.value?.status === 'Open' && messages.value.length > 0) {
+    generateAISuggestion();
+  }
+  
+  // Check for alerts
+  checkForAlerts();
 });
 </script>
 
@@ -52,7 +135,89 @@ onMounted(async () => {
       </div>
 
       <div class="rounded-xl bg-white border shadow-sm p-4 space-y-4">
-        <div>
+        <div class="flex items-center justify-between">
+          <h3 class="font-medium text-gray-900">AI Insights & Actions</h3>
+          <button 
+            @click="showAIPanel = !showAIPanel" 
+            class="text-sm text-gray-500 hover:text-gray-700"
+          >
+            {{ showAIPanel ? 'Hide' : 'Show' }}
+          </button>
+        </div>
+        
+        <div v-if="showAIPanel" class="space-y-4">
+          <!-- AI Summary Section -->
+          <div class="border rounded-lg p-3 bg-blue-50">
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs font-medium text-blue-700">AI Summary</p>
+              <button 
+                @click="generateAISummary" 
+                :disabled="isGeneratingAI"
+                class="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50"
+              >
+                {{ isGeneratingAI ? 'Generating...' : 'Regenerate' }}
+              </button>
+            </div>
+            <p class="text-sm text-gray-800">{{ selectedTicket.ai_summary || 'No summary yet. Click regenerate to generate.' }}</p>
+          </div>
+          
+          <!-- Suggested Reply Section -->
+          <div class="border rounded-lg p-3 bg-green-50" v-if="aiSuggestedReply">
+            <p class="text-xs font-medium text-green-700 mb-2">Suggested Reply</p>
+            <p class="text-sm text-gray-800 mb-3 whitespace-pre-wrap">{{ aiSuggestedReply }}</p>
+            <button 
+              @click="useAISuggestion"
+              class="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+            >
+              Use This Reply
+            </button>
+          </div>
+          
+          <!-- Recommended Action Section -->
+          <div class="border rounded-lg p-3 bg-amber-50" v-if="aiRecommendedAction">
+            <p class="text-xs font-medium text-amber-700 mb-2">Recommended Action</p>
+            <p class="text-sm text-gray-800">{{ aiRecommendedAction }}</p>
+          </div>
+          
+          <!-- Escalation Section -->
+          <div class="border rounded-lg p-3 bg-red-50">
+            <p class="text-xs font-medium text-red-700 mb-2">Escalation</p>
+            <div class="space-y-2">
+              <select 
+                class="w-full text-sm border rounded px-2 py-1"
+                @change="(e) => {
+                  const target = e.target as HTMLSelectElement;
+                  if (target.value) escalateTicket(target.value);
+                }"
+              >
+                <option value="">Select escalation reason...</option>
+                <option v-for="reason in escalationReasons" :value="reason">{{ reason }}</option>
+              </select>
+              <p class="text-xs text-gray-500">Ticket will be marked as Critical and alerts will be sent.</p>
+            </div>
+          </div>
+          
+          <!-- AI Suggestions History -->
+          <div class="border rounded-lg p-3 bg-gray-50" v-if="suggestions.length > 0">
+            <p class="text-xs font-medium text-gray-700 mb-2">AI Suggestions History</p>
+            <div class="space-y-2 max-h-40 overflow-y-auto">
+              <div 
+                v-for="suggestion in suggestions" 
+                :key="suggestion.id"
+                class="text-xs p-2 bg-white rounded border"
+              >
+                <div class="flex justify-between">
+                  <span class="font-medium capitalize">{{ suggestion.type }}</span>
+                  <span class="text-gray-500">{{ new Date(suggestion.created_at).toLocaleTimeString() }}</span>
+                </div>
+                <p class="mt-1 text-gray-600 truncate">{{ suggestion.content }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Original AI Summary (fallback when panel is hidden) -->
+        <div v-else>
           <p class="text-xs text-gray-500">AI Summary</p>
           <p class="mt-1 text-sm text-gray-800">{{ selectedTicket.ai_summary || 'No summary yet' }}</p>
         </div>

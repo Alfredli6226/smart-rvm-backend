@@ -24,11 +24,12 @@ onMounted(applyFilters);
       <div v-if="usingMock" class="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Mock mode</div>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-5">
       <div class="rounded-xl bg-white p-4 shadow-sm border"><p class="text-xs text-gray-500">Total</p><p class="text-2xl font-bold">{{ stats.total }}</p></div>
       <div class="rounded-xl bg-white p-4 shadow-sm border"><p class="text-xs text-gray-500">New</p><p class="text-2xl font-bold text-blue-600">{{ stats.open }}</p></div>
       <div class="rounded-xl bg-white p-4 shadow-sm border"><p class="text-xs text-gray-500">Urgent / Hot</p><p class="text-2xl font-bold text-red-600">{{ stats.urgent }}</p></div>
       <div class="rounded-xl bg-white p-4 shadow-sm border"><p class="text-xs text-gray-500">Pending</p><p class="text-2xl font-bold text-orange-600">{{ stats.inProgress }}</p></div>
+      <div class="rounded-xl bg-white p-4 shadow-sm border"><p class="text-xs text-gray-500">AI Processed</p><p class="text-2xl font-bold text-purple-600">{{ tickets.filter(t => t.ai_summary).length }}</p></div>
     </div>
 
     <div class="rounded-xl bg-white p-4 shadow-sm border space-y-3">
@@ -44,17 +45,74 @@ onMounted(applyFilters);
     <div class="rounded-xl bg-white shadow-sm border overflow-hidden">
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
-          <thead class="bg-gray-50 text-gray-500"><tr><th class="px-4 py-3 text-left">Customer</th><th class="px-4 py-3 text-left">Category</th><th class="px-4 py-3 text-left">Priority</th><th class="px-4 py-3 text-left">Lead</th><th class="px-4 py-3 text-left">AI Summary</th><th class="px-4 py-3 text-left">Assigned</th><th class="px-4 py-3 text-left"></th></tr></thead>
+          <thead class="bg-gray-50 text-gray-500"><tr><th class="px-4 py-3 text-left">Customer</th><th class="px-4 py-3 text-left">Category</th><th class="px-4 py-3 text-left">Priority</th><th class="px-4 py-3 text-left">Lead</th><th class="px-4 py-3 text-left">AI Summary</th><th class="px-4 py-3 text-left">Channel</th><th class="px-4 py-3 text-left">Assigned</th><th class="px-4 py-3 text-left"></th></tr></thead>
           <tbody>
             <tr v-if="loading"><td colspan="7" class="px-4 py-6 text-center text-gray-500">Loading...</td></tr>
             <tr v-for="ticket in visibleTickets" :key="ticket.id" class="border-t hover:bg-gray-50">
-              <td class="px-4 py-3"><div class="font-medium text-gray-900">{{ ticket.customer_name || 'Unknown' }}</div><div class="text-xs text-gray-500">{{ ticket.customer_phone || ticket.source || ticket.ticket_number }}</div></td>
-              <td class="px-4 py-3 capitalize">{{ ticket.category }}</td>
-              <td class="px-4 py-3 capitalize">{{ ticket.priority }}</td>
-              <td class="px-4 py-3 uppercase font-semibold">{{ ticket.lead_score || '-' }}</td>
-              <td class="px-4 py-3 text-gray-600 max-w-md">{{ ticket.ai_summary }}</td>
+              <td class="px-4 py-3">
+                <div class="font-medium text-gray-900">{{ ticket.customer_name || 'Unknown' }}</div>
+                <div class="text-xs text-gray-500">{{ ticket.customer_phone || ticket.source || ticket.ticket_number }}</div>
+                <div v-if="ticket.company_name" class="text-xs text-blue-600">{{ ticket.company_name }}</div>
+              </td>
+              <td class="px-4 py-3 capitalize">
+                {{ ticket.category }}
+                <div v-if="ticket.ai_tags && ticket.ai_tags.length > 0" class="text-xs text-gray-400">
+                  {{ ticket.ai_tags.slice(0, 2).join(', ') }}
+                </div>
+              </td>
+              <td class="px-4 py-3 capitalize">
+                <span 
+                  class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                  :class="{
+                    'bg-red-100 text-red-800': ticket.priority === 'Critical',
+                    'bg-orange-100 text-orange-800': ticket.priority === 'High',
+                    'bg-blue-100 text-blue-800': ticket.priority === 'Medium',
+                    'bg-gray-100 text-gray-800': ticket.priority === 'Low',
+                  }"
+                >
+                  {{ ticket.priority }}
+                </span>
+              </td>
+              <td class="px-4 py-3 uppercase font-semibold">
+                <span 
+                  class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                  :class="{
+                    'bg-red-100 text-red-800': ticket.lead_score === 'hot',
+                    'bg-orange-100 text-orange-800': ticket.lead_score === 'warm',
+                    'bg-blue-100 text-blue-800': ticket.lead_score === 'cold',
+                  }"
+                >
+                  {{ ticket.lead_score || '-' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-gray-600 max-w-xs">
+                <div class="truncate" :title="ticket.ai_summary">
+                  {{ ticket.ai_summary || 'No AI summary' }}
+                </div>
+                <div v-if="ticket.ai_sentiment" class="text-xs mt-1">
+                  <span 
+                    class="inline-flex items-center px-1.5 py-0.5 rounded"
+                    :class="{
+                      'bg-green-100 text-green-800': ticket.ai_sentiment === 'positive',
+                      'bg-red-100 text-red-800': ticket.ai_sentiment === 'negative',
+                      'bg-gray-100 text-gray-800': ticket.ai_sentiment === 'neutral',
+                    }"
+                  >
+                    {{ ticket.ai_sentiment }}
+                  </span>
+                </div>
+              </td>
+              <td class="px-4 py-3">
+                <span 
+                  class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                >
+                  {{ ticket.channel || ticket.source || 'Unknown' }}
+                </span>
+              </td>
               <td class="px-4 py-3">{{ ticket.assigned_to || 'Unassigned' }}</td>
-              <td class="px-4 py-3 text-right"><button @click="openTicket(ticket.id)" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-white">Open</button></td>
+              <td class="px-4 py-3 text-right">
+                <button @click="openTicket(ticket.id)" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-white hover:bg-emerald-700">Open</button>
+              </td>
             </tr>
           </tbody>
         </table>

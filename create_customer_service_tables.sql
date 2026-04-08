@@ -51,6 +51,15 @@ create table if not exists public.customer_service_leads (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.ai_suggestions (
+  id uuid primary key default gen_random_uuid(),
+  ticket_id uuid not null references public.customer_service_tickets(id) on delete cascade,
+  type text not null check (type in ('summary', 'reply', 'action', 'sentiment')),
+  content text not null,
+  confidence numeric not null default 0.5,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_customer_service_tickets_status on public.customer_service_tickets(status);
 create index if not exists idx_customer_service_tickets_category on public.customer_service_tickets(category);
 create index if not exists idx_customer_service_tickets_updated_at on public.customer_service_tickets(updated_at desc);

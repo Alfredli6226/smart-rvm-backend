@@ -237,10 +237,12 @@ export interface CustomerServiceTicket {
   customer_email?: string;
   customer_phone?: string;
   user_id?: string;
+  company_name?: string;
   
   // Ticket Classification
   category: string;
   subcategory?: string;
+  channel?: 'website' | 'whatsapp' | 'email' | 'phone' | 'social' | 'in-person';
   
   // Priority & Status
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
@@ -253,7 +255,7 @@ export interface CustomerServiceTicket {
   created_by?: string;
   
   // Source & Context
-  source?: 'Web' | 'Email' | 'Phone' | 'WhatsApp' | 'In-person';
+  source?: 'Web' | 'Email' | 'Phone' | 'WhatsApp' | 'In-person' | 'Social Media';
   related_machine_id?: number;
   related_merchant_id?: string;
   
@@ -262,6 +264,9 @@ export interface CustomerServiceTicket {
   ai_sentiment?: 'positive' | 'negative' | 'neutral';
   ai_tags?: string[];
   ai_priority_score?: number;
+  ai_suggested_reply?: string;
+  ai_recommended_action?: string;
+  ai_escalation_reason?: string;
   
   // Timestamps
   first_response_at?: string;
@@ -274,6 +279,8 @@ export interface CustomerServiceTicket {
   // Metadata
   attachments?: string[];
   custom_fields?: Record<string, any>;
+  next_action?: string;
+  last_message_at?: string;
   
   // Joined Data
   assigned_admin?: { email: string; full_name?: string };
@@ -288,11 +295,11 @@ export interface CustomerServiceMessage {
   ticket_id: string;
   
   // Message Content
-  message_type: 'message' | 'internal_note' | 'system';
+  message_type: 'message' | 'internal_note' | 'system' | 'ai_suggestion';
   content: string;
   
   // Sender Information
-  sender_type: 'customer' | 'agent' | 'system';
+  sender_type: 'customer' | 'agent' | 'system' | 'ai';
   sender_id?: string;
   sender_name?: string;
   sender_email?: string;
@@ -302,6 +309,7 @@ export interface CustomerServiceMessage {
   is_internal: boolean;
   read_by_agent: boolean;
   read_by_customer: boolean;
+  is_ai_suggestion?: boolean;
   
   // Timestamps
   created_at: string;
