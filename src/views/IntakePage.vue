@@ -661,3 +661,4 @@ import IntakeForm from '../components/IntakeForm.vue';
     text-align: center;
   }
 }
+</style>
