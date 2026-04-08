@@ -41,19 +41,23 @@ export type SubmissionStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 // 3. DATABASE INTERFACES
 // ==========================================
 
+export type UserStatus = 'ACTIVE' | 'WARNED' | 'BLOCKED';
+
 export interface User {
   id: string;
   vendor_user_no?: string | null;
   phone: string;
   email?: string | null;
   
-  // Global stats (optional, as specific data is now in MerchantWallet)
   lifetime_integral: number;
   total_weight?: number;
   
   created_at: string;
+  updated_at?: string;
+  last_active_at?: string;
   
-  // Hybrid Sync Fields
+  status?: UserStatus;
+  
   nickname?: string | null;
   avatar_url?: string | null;
   card_no?: string | null;
@@ -216,4 +220,177 @@ export interface ApiPutResponse {
     pageNum: number;
     pageSize: number;
   };
+}
+
+// ==========================================
+// 5. CUSTOMER SERVICE & LEADS TYPES (New)
+// ==========================================
+
+export interface CustomerServiceTicket {
+  id: string;
+  ticket_number: string;
+  subject: string;
+  description: string;
+  
+  // Customer/User Information
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  user_id?: string;
+  
+  // Ticket Classification
+  category: string;
+  subcategory?: string;
+  
+  // Priority & Status
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  status: 'Open' | 'In Progress' | 'On Hold' | 'Resolved' | 'Closed';
+  lead_score?: 'hot' | 'warm' | 'cold';
+  
+  // Assignment & Ownership
+  assigned_to?: string;
+  assigned_at?: string;
+  created_by?: string;
+  
+  // Source & Context
+  source?: 'Web' | 'Email' | 'Phone' | 'WhatsApp' | 'In-person';
+  related_machine_id?: number;
+  related_merchant_id?: string;
+  
+  // AI & Analysis Fields
+  ai_summary?: string;
+  ai_sentiment?: 'positive' | 'negative' | 'neutral';
+  ai_tags?: string[];
+  ai_priority_score?: number;
+  
+  // Timestamps
+  first_response_at?: string;
+  resolved_at?: string;
+  closed_at?: string;
+  sla_deadline?: string;
+  created_at: string;
+  updated_at: string;
+  
+  // Metadata
+  attachments?: string[];
+  custom_fields?: Record<string, any>;
+  
+  // Joined Data
+  assigned_admin?: { email: string; full_name?: string };
+  created_admin?: { email: string; full_name?: string };
+  machine?: { device_no: string; name: string };
+  merchant?: { name: string; currency_symbol: string };
+  user?: { nickname: string; phone: string };
+}
+
+export interface CustomerServiceMessage {
+  id: string;
+  ticket_id: string;
+  
+  // Message Content
+  message_type: 'message' | 'internal_note' | 'system';
+  content: string;
+  
+  // Sender Information
+  sender_type: 'customer' | 'agent' | 'system';
+  sender_id?: string;
+  sender_name?: string;
+  sender_email?: string;
+  
+  // Metadata
+  attachments?: string[];
+  is_internal: boolean;
+  read_by_agent: boolean;
+  read_by_customer: boolean;
+  
+  // Timestamps
+  created_at: string;
+  updated_at: string;
+  
+  // Joined Data
+  sender_admin?: { email: string; full_name?: string };
+  sender_user?: { nickname: string; phone: string };
+}
+
+export interface Lead {
+  id: string;
+  lead_number: string;
+  
+  // Lead Information
+  company_name?: string;
+  contact_person: string;
+  email: string;
+  phone?: string;
+  
+  // Lead Details
+  inquiry_type: string;
+  description?: string;
+  estimated_value?: number;
+  currency: string;
+  
+  // Status & Scoring
+  status: 'New' | 'Contacted' | 'Qualified' | 'Proposal Sent' | 'Negotiation' | 'Won' | 'Lost';
+  lead_score: 'hot' | 'warm' | 'cold';
+  confidence_score: number;
+  
+  // Source & Campaign
+  source: string;
+  campaign?: string;
+  referral_source?: string;
+  
+  // Assignment
+  assigned_to?: string;
+  assigned_at?: string;
+  
+  // Follow-up
+  next_follow_up?: string;
+  last_contacted?: string;
+  
+  // AI & Analysis
+  ai_summary?: string;
+  ai_tags?: string[];
+  ai_qualification_score?: number;
+  
+  // Timestamps
+  created_at: string;
+  updated_at: string;
+  
+  // Metadata
+  custom_fields?: Record<string, any>;
+  notes?: string;
+  
+  // Joined Data
+  assigned_admin?: { email: string; full_name?: string };
+}
+
+export interface CustomerServiceCategory {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  color: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+// Filter interfaces
+export interface TicketFilters {
+  status?: string;
+  priority?: string;
+  category?: string;
+  assigned_to?: string;
+  lead_score?: string;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
+}
+
+export interface LeadFilters {
+  status?: string;
+  lead_score?: string;
+  assigned_to?: string;
+  source?: string;
+  date_from?: string;
+  date_to?: string;
+  search?: string;
 }

@@ -15,6 +15,10 @@ import AdminManager from '../views/AdminManager.vue';
 import IssueReports from '../views/IssueReports.vue';
 import MerchantSettings from '../views/MerchantSettings.vue';
 import BigDataPlatform from '../views/BigDataPlatform.vue';
+import ReportsView from '../views/ReportsView.vue';
+import CustomerServiceInbox from '../views/CustomerServiceInbox.vue';
+import CustomerThreadDetail from '../views/CustomerThreadDetail.vue';
+import LeadsManager from '../views/LeadsManager.vue';
 
 const MerchantsManager = () => import('../views/SuperAdmin/Merchants.vue');
 const ManageClientSettings = () => import('../views/SuperAdmin/ManageClientSettings.vue');
@@ -119,6 +123,14 @@ const router = createRouter({
           component: MerchantSettings,
           meta: { title: 'Settings' } 
         },
+        // Platform Routes
+        {
+          path: 'platform/advertising',
+          name: 'DigitalAdvertising',
+          component: () => import('../views/DigitalAdvertising.vue'),
+          meta: { requiresSuperAdmin: true, title: 'Digital Advertising' } 
+        },
+
         // Super Admin Routes
         {
           path: 'super-admin/merchants',
@@ -143,6 +155,30 @@ const router = createRouter({
           name: 'Notifications',
           component: () => import('../views/Notifications.vue'),
           meta: { title: 'Notifications' } 
+        },
+        {
+          path: 'customer-service',
+          name: 'CustomerServiceInbox',
+          component: CustomerServiceInbox,
+          meta: { title: 'Customer Service Inbox' }
+        },
+        {
+          path: 'customer-service/:id',
+          name: 'CustomerThreadDetail',
+          component: CustomerThreadDetail,
+          meta: { title: 'Customer Thread Detail' }
+        },
+        {
+          path: 'leads',
+          name: 'LeadsManager',
+          component: LeadsManager,
+          meta: { title: 'Leads Manager' }
+        },
+        {
+          path: 'reports',
+          name: 'Reports',
+          component: ReportsView,
+          meta: { title: 'Reports' } 
         },
       ]
     }

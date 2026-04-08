@@ -3,7 +3,7 @@ import { RouterLink, useRoute } from 'vue-router';
 import { computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { useNotifications, notificationCount, issueCount } from '../composables/useNotifications';
-import { LayoutDashboard, Wallet, Users, MonitorSmartphone, LogOut, Shield, ClipboardCheck, Trash2, Settings, Globe, AlertCircle, Bell } from 'lucide-vue-next';
+import { LayoutDashboard, Wallet, Users, MonitorSmartphone, LogOut, Shield, ClipboardCheck, Trash2, Settings, Globe, AlertCircle, Bell, FileText, Megaphone } from 'lucide-vue-next';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -86,6 +86,14 @@ const settingsPath = computed(() => {
         Waste Logs
       </RouterLink>
 
+      <RouterLink to="/reports" 
+        class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+        :class="isActive('/reports') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+      >
+        <FileText :size="20" />
+        Reports
+      </RouterLink>
+
       <!-- Notifications - visible to Agents and Collectors (not SUPER_ADMIN) -->
       <RouterLink to="/notifications" 
         v-if="auth.role !== 'SUPER_ADMIN'"
@@ -119,6 +127,14 @@ const settingsPath = computed(() => {
         >
           <Globe :size="20" />
           Manage Clients
+        </RouterLink>
+
+        <RouterLink to="/platform/advertising" 
+          class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+          :class="isActive('/platform/advertising') ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+        >
+          <Megaphone :size="20" />
+          Digital Advertising
         </RouterLink>
 
         <RouterLink to="/super-admin/issues" 
