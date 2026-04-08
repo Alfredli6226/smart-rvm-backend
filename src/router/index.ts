@@ -36,6 +36,12 @@ const router = createRouter({
       meta: { hideSidebar: true, requiresAuth: false, title: 'Login' } 
     },
     {
+      path: '/contact',
+      name: 'Contact',
+      component: () => import('../views/IntakePage.vue'),
+      meta: { hideSidebar: true, requiresAuth: false, title: 'Contact Us' }
+    },
+    {
       path: '/big-data',
       name: 'BigDataPlatform',
       component: BigDataPlatform,

@@ -16,7 +16,7 @@ export interface IntakePayload {
   company?: string;
   
   // Inquiry Details
-  subject: string;
+  subject?: string;
   message: string;
   inquiryType?: string;
   
