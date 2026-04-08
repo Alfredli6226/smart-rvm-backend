@@ -281,7 +281,7 @@ class IntakeService {
    */
   private classifyWebsiteInquiry(payload: IntakePayload) {
     const message = payload.message.toLowerCase();
-    const subject = payload.subject.toLowerCase();
+    const subject = (payload.subject || '').toLowerCase();
     
     let category = 'General';
     let priority: 'Low' | 'Medium' | 'High' | 'Critical' = 'Medium';
