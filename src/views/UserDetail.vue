@@ -2,7 +2,8 @@
 import { ref, watch } from 'vue';
 import { useRoute, RouterLink } from 'vue-router';
 import { useUserProfile } from '../composables/useUserProfile'; 
-import { RefreshCw, ArrowLeft, CreditCard, Hash, Mail } from 'lucide-vue-next';
+import { supabase } from '../services/supabase';
+import { RefreshCw, ArrowLeft, CreditCard, Hash, Mail, AlertTriangle, Ban, CheckCircle, Wallet, Scale, Edit2 } from 'lucide-vue-next';
 
 const route = useRoute();
 const activeTab = ref<'earned' | 'spent'>('earned');
@@ -21,6 +22,79 @@ watch(() => route.params.id, (newId) => {
 const handleImageError = (e: Event) => {
     const target = e.target as HTMLImageElement;
     target.src = 'https://placehold.co/100x100?text=No+Img';
+};
+
+const isUpdatingStatus = ref(false);
+const showStatusModal = ref(false);
+const newStatus = ref<'ACTIVE' | 'WARNED' | 'BLOCKED'>('ACTIVE');
+
+const showAdjustModal = ref(false);
+const adjustAmount = ref<number | null>(null);
+const adjustNote = ref('');
+const adjustType = ref<'points' | 'weight'>('points');
+const isSubmittingAdjust = ref(false);
+
+const showEditProfile = ref(false);
+const editProfile = ref({ nickname: '', phone: '', email: '', card_no: '', vendor_internal_id: '' });
+const isSubmittingProfile = ref(false);
+
+const getStatusBadge = (status?: string) => {
+    switch (status) {
+        case 'ACTIVE': return { color: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle };
+        case 'WARNED': return { color: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: AlertTriangle };
+        case 'BLOCKED': return { color: 'bg-red-100 text-red-700 border-red-200', icon: Ban };
+        default: return { color: 'bg-gray-100 text-gray-700 border-gray-200', icon: CheckCircle };
+    }
+};
+
+const openStatusModal = (status: 'ACTIVE' | 'WARNED' | 'BLOCKED') => { newStatus.value = status; showStatusModal.value = true; };
+const updateUserStatus = async () => {
+    if (!user.value || isUpdatingStatus.value) return;
+    isUpdatingStatus.value = true;
+    try {
+        const { error } = await supabase.from('users').update({ status: newStatus.value, updated_at: new Date().toISOString() }).eq('id', user.value.id);
+        if (error) throw error;
+        if (user.value) user.value.status = newStatus.value;
+        showStatusModal.value = false;
+    } catch (err: any) { console.error('Status update error:', err); } 
+    finally { isUpdatingStatus.value = false; }
+};
+
+const openAdjustModal = (type: 'points' | 'weight') => { adjustType.value = type; adjustAmount.value = null; adjustNote.value = ''; showAdjustModal.value = true; };
+const handleAdjust = async () => {
+    if (!user.value || !adjustAmount.value || isSubmittingAdjust.value) return;
+    isSubmittingAdjust.value = true;
+    try {
+        if (adjustType.value === 'points') {
+            const newPoints = (user.value.lifetime_integral || 0) + adjustAmount.value;
+            await supabase.from('users').update({ lifetime_integral: newPoints, updated_at: new Date().toISOString() }).eq('id', user.value.id);
+            user.value.lifetime_integral = newPoints;
+        } else {
+            const newWeight = (user.value.total_weight || 0) + adjustAmount.value;
+            await supabase.from('users').update({ total_weight: newWeight, updated_at: new Date().toISOString() }).eq('id', user.value.id);
+            user.value.total_weight = newWeight;
+        }
+        showAdjustModal.value = false;
+    } catch (err: any) { console.error('Adjust error:', err); }
+    finally { isSubmittingAdjust.value = false; }
+};
+
+const openEditProfile = () => {
+    if (user.value) {
+        editProfile.value = { nickname: user.value.nickname || '', phone: user.value.phone || '', email: user.value.email || '', card_no: user.value.card_no || '', vendor_internal_id: user.value.vendor_internal_id || '' };
+        showEditProfile.value = true;
+    }
+};
+const handleProfileSave = async () => {
+    if (!user.value || isSubmittingProfile.value) return;
+    isSubmittingProfile.value = true;
+    try {
+        const { error } = await supabase.from('users').update({ ...editProfile.value, updated_at: new Date().toISOString() }).eq('id', user.value.id);
+        if (error) throw error;
+        Object.assign(user.value, editProfile.value);
+        showEditProfile.value = false;
+    } catch (err: any) { console.error('Profile update error:', err); }
+    finally { isSubmittingProfile.value = false; }
 };
 </script>
 
@@ -46,7 +120,21 @@ const handleImageError = (e: Event) => {
                 </div>
               </div>
               <div>
-                  <h1 class="text-2xl font-bold text-gray-900">{{ user.nickname || 'Unknown User' }}</h1>
+                  <div class="flex items-center gap-2">
+                    <h1 class="text-2xl font-bold text-gray-900">{{ user.nickname || 'Unknown User' }}</h1>
+                    <button @click="openEditProfile" class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Edit Profile">
+                        <Edit2 :size="16" />
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2 mt-1">
+                    <span :class="`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(user.status).color}`">
+                        <component :is="getStatusBadge(user.status).icon" :size="12" class="mr-1" />
+                        {{ user.status || 'ACTIVE' }}
+                    </span>
+                    <button v-if="user.status !== 'WARNED'" @click="openStatusModal('WARNED')" class="text-xs text-yellow-600 hover:text-yellow-700 hover:underline">Warn</button>
+                    <button v-if="user.status !== 'BLOCKED'" @click="openStatusModal('BLOCKED')" class="text-xs text-red-600 hover:text-red-700 hover:underline">Block</button>
+                    <button v-if="user.status && user.status !== 'ACTIVE'" @click="openStatusModal('ACTIVE')" class="text-xs text-green-600 hover:text-green-700 hover:underline">Activate</button>
+                  </div>
                   <div class="flex items-center text-gray-500 text-sm mt-1">
                       <span class="font-mono bg-gray-100 px-2 py-0.5 rounded text-xs mr-2">{{ user.phone }}</span>
                       <span v-if="user.vendor_user_no" class="text-xs">Ext ID: {{ user.vendor_user_no }}</span>
@@ -58,13 +146,13 @@ const handleImageError = (e: Event) => {
           </div>
 
           <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
-              <div class="text-right">
+              <div class="text-right group cursor-pointer" @click="openAdjustModal('weight')">
                   <div class="text-xs text-gray-500 uppercase tracking-wide font-semibold">Recycled</div>
-                  <div class="text-xl font-bold text-slate-700">{{ user.total_weight || 0 }} kg</div>
+                  <div class="text-xl font-bold text-slate-700 group-hover:text-blue-600 transition-colors">{{ user.total_weight || 0 }} kg <Scale :size="14" class="inline opacity-0 group-hover:opacity-50 ml-1" /></div>
               </div>
               <div class="text-right border-l pl-6 border-gray-100">
                   <div class="text-xs text-gray-500 uppercase tracking-wide font-semibold">Verified Balance</div>
-                  <div class="text-3xl font-bold text-blue-600">{{ auditResult.currentBalance }}</div>
+                  <div class="text-3xl font-bold text-blue-600 group-hover:text-blue-700 transition-colors">{{ auditResult.currentBalance }}</div>
               </div>
               
               <div class="flex flex-col items-end">
@@ -208,6 +296,79 @@ const handleImageError = (e: Event) => {
               </table>
           </div>
       </div>
+    </div>
+
+    <!-- Status Modal -->
+    <div v-if="showStatusModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showStatusModal = false">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Update User Status</h3>
+            <p class="text-gray-600 mb-6">Change status to <span class="font-bold">{{ newStatus }}</span>?</p>
+            <div class="flex gap-3 justify-end">
+                <button @click="showStatusModal = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                <button @click="updateUserStatus" :disabled="isUpdatingStatus" class="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+                    {{ isUpdatingStatus ? 'Saving...' : 'Confirm' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div v-if="showEditProfile" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showEditProfile = false">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Edit Profile</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nickname</label>
+                    <input v-model="editProfile.nickname" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input v-model="editProfile.phone" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input v-model="editProfile.email" type="email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
+                    <input v-model="editProfile.card_no" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Vendor Internal ID</label>
+                    <input v-model="editProfile.vendor_internal_id" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+            </div>
+            <div class="flex gap-3 justify-end mt-6">
+                <button @click="showEditProfile = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                <button @click="handleProfileSave" :disabled="isSubmittingProfile" class="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+                    {{ isSubmittingProfile ? 'Saving...' : 'Save' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Balance Adjustment Modal -->
+    <div v-if="showAdjustModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showAdjustModal = false">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Adjust {{ adjustType === 'points' ? 'Points' : 'Weight' }}</h3>
+            <p class="text-gray-600 mb-4 text-sm">Current: {{ adjustType === 'points' ? (user?.lifetime_integral || 0) + ' pts' : (user?.total_weight || 0) + ' kg' }}</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ adjustType === 'points' ? 'Points' : 'Weight (kg)' }}</label>
+                    <input v-model.number="adjustAmount" type="number" step="0.01" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter amount (use negative to deduct)" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Note (optional)</label>
+                    <input v-model="adjustNote" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Reason for adjustment" />
+                </div>
+            </div>
+            <div class="flex gap-3 justify-end mt-6">
+                <button @click="showAdjustModal = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                <button @click="handleAdjust" :disabled="isSubmittingAdjust || !adjustAmount" class="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+                    {{ isSubmittingAdjust ? 'Saving...' : 'Confirm' }}
+                </button>
+            </div>
+        </div>
     </div>
   </div>
 </template>

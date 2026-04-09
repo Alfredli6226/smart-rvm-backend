@@ -30,7 +30,9 @@ export function useSubmissionReviews() {
         search: '',
         wasteType: '',
         startDate: '',
-        endDate: ''
+        endDate: '',
+        machineId: '',
+        location: ''
     });
 
     // Pagination State
@@ -49,6 +51,7 @@ export function useSubmissionReviews() {
                 if (!match) return false;
             }
             if (searchFilters.value.wasteType && !item.waste_type?.includes(searchFilters.value.wasteType)) return false;
+            if (searchFilters.value.machineId && item.device_no !== searchFilters.value.machineId) return false;
             if (searchFilters.value.startDate || searchFilters.value.endDate) {
                 if (!item.submitted_at) return false;
                 const itemDate = item.submitted_at.split('T')[0] || '';

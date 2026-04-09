@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useUserList } from '../composables/useUserList';
-import { ChevronRight, Smartphone, Scale, Search, DownloadCloud, Wallet, ChevronLeft, Mail } from 'lucide-vue-next';
+import { ChevronRight, Smartphone, Scale, Search, DownloadCloud, Wallet, ChevronLeft, Mail, TrendingUp, Users, Clock, Star } from 'lucide-vue-next';
 
 // Components
 import SimpleConfirmModal from '../components/SimpleConfirmModal.vue';
@@ -12,6 +12,17 @@ import UserCreateModal from '../components/UserCreateModal.vue';
 // Logic
 const { users, loading, isSubmitting, adjustBalance, importUser, deleteUser } = useUserList();
 const searchQuery = ref('');
+
+// --- CATEGORY FILTER ---
+type FilterType = 'all' | 'top_recyclers' | 'new_registers' | 'active_users';
+const categoryFilter = ref<FilterType>('all');
+
+const categoryOptions = [
+    { value: 'all', label: 'All Users', icon: Users },
+    { value: 'top_recyclers', label: 'Top Recyclers', icon: TrendingUp },
+    { value: 'new_registers', label: 'New Registers', icon: Clock },
+    { value: 'active_users', label: 'Active Users', icon: Star },
+] as const;
 
 // --- PAGINATION STATE ---
 const currentPage = ref(1);
@@ -97,11 +108,35 @@ const handleCreateUserConfirm = async (payload: { nickname: string, phone: strin
 
 // --- COMPUTED ---
 const filteredUsers = computed(() => {
-  if (!searchQuery.value) return users.value;
-  const q = searchQuery.value.toLowerCase();
-  return users.value.filter(u => 
-    u.nickname?.toLowerCase().includes(q) || u.phone?.includes(q)
-  );
+  let result = users.value;
+  
+  // Apply category filter
+  if (categoryFilter.value !== 'all') {
+    result = [...result].sort((a, b) => {
+      switch (categoryFilter.value) {
+        case 'top_recyclers':
+          return (b.total_weight || 0) - (a.total_weight || 0);
+        case 'new_registers':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'active_users':
+          const aDate = a.last_active_at ? new Date(a.last_active_at).getTime() : 0;
+          const bDate = b.last_active_at ? new Date(b.last_active_at).getTime() : 0;
+          return bDate - aDate;
+        default:
+          return 0;
+      }
+    });
+  }
+  
+  // Apply search filter
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase();
+    result = result.filter(u => 
+      u.nickname?.toLowerCase().includes(q) || u.phone?.includes(q)
+    );
+  }
+  
+  return result;
 });
 
 // Pagination Logic
@@ -128,9 +163,18 @@ const handleImageError = (e: Event) => {
   <div class="space-y-6">
       
     <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-        <div class="relative w-full md:w-96">
-            <Search class="absolute left-3 top-2.5 text-gray-400" :size="20"/>
-            <input v-model="searchQuery" placeholder="Search users by name or phone..." class="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"/>
+        <div class="flex items-center gap-3">
+            <!-- Category Filter Tabs -->
+            <div class="flex items-center bg-gray-100 rounded-lg p-1">
+                <button v-for="cat in categoryOptions" :key="cat.value" @click="categoryFilter = cat.value as FilterType" :class="['flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all', categoryFilter === cat.value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700']">
+                    <component :is="cat.icon" :size="16" />
+                    {{ cat.label }}
+                </button>
+            </div>
+            <div class="relative w-full md:w-64">
+                <Search class="absolute left-3 top-2.5 text-gray-400" :size="20"/>
+                <input v-model="searchQuery" placeholder="Search users..." class="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"/>
+            </div>
         </div>
         
         <button @click="showCreateModal = true" class="flex items-center gap-2 bg-gray-900 text-white px-4 py-2.5 rounded-xl hover:bg-gray-800 text-sm font-bold transition-all shadow-lg active:scale-95">

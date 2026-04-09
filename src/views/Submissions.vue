@@ -2,11 +2,15 @@
 import { onMounted, ref, watch } from 'vue';
 import { useSubmissionReviews } from '../composables/useSubmissionReviews';
 import { useAuthStore } from '../stores/auth';
+import { useMachineStore } from '../stores/machines';
 import SubmissionCorrectionModal from '../components/SubmissionCorrectionModal.vue';
 import SubmissionCleanupModal from '../components/SubmissionCleanupModal.vue';
 import SubmissionFilters from '../components/SubmissionFilters.vue';
 import SimpleConfirmModal from '../components/SimpleConfirmModal.vue';
-import { RefreshCw, Check, Edit3, Clock, Trash2, X, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { RefreshCw, Check, Edit3, Clock, Trash2, X, ChevronLeft, ChevronRight, FileSpreadsheet, FileText } from 'lucide-vue-next';
+import * as XLSX from 'xlsx';
+
+const { machines: machineList, fetchMachines } = useMachineStore();
 
 // Use the fat composable
 const { 
@@ -17,16 +21,16 @@ const {
   showCleanupModal,
   selectedReview,
   modalStartInReject,
-  activeStatusTab,
   searchFilters,
   currentPage,
   itemsPerPage,
+  activeStatusTab,
   
   // Computed Data
   paginatedReviews,
   totalPages,
   filteredReviews,
-
+ 
   // Actions
   fetchReviews, 
   harvestNewSubmissions,
@@ -74,7 +78,10 @@ const formatDate = (dateString: string) => {
   });
 };
 
-onMounted(() => fetchReviews());
+onMounted(async () => {
+  await fetchMachines();
+  fetchReviews();
+});
 
 // Watch for auth to finish loading, then refetch
 watch(() => auth.loading, (isLoading) => {
@@ -91,6 +98,83 @@ watch(() => auth.role, (newRole) => {
     fetchReviews();
   }
 });
+
+// Export functions
+const exportToExcel = () => {
+  const data = filteredReviews.value.map(item => ({
+    'Submitted At': item.submitted_at,
+    'User': item.users?.nickname || 'Guest User',
+    'Phone': item.users?.phone || item.phone || '',
+    'Machine ID': item.device_no,
+    'Waste Type': item.waste_type,
+    'User Weight (kg)': item.api_weight,
+    'Bin Level (kg)': item.bin_weight_snapshot || 0,
+    'Theoretical Weight (kg)': item.theoretical_weight,
+    'Warehouse Weight (kg)': item.warehouse_weight || '',
+    'Confirmed Weight (kg)': item.confirmed_weight || '',
+    'Points': item.calculated_value || (item.api_weight * item.rate_per_kg).toFixed(2),
+    'Status': item.status
+  }));
+
+  // Calculate totals by waste type
+  const totals: Record<string, number> = {};
+  filteredReviews.value.forEach(item => {
+    const type = item.waste_type || 'Other';
+    if (!totals[type]) totals[type] = 0;
+    totals[type] += item.api_weight || 0;
+  });
+
+  // Add summary rows
+  data.push({} as any);
+  data.push({ 'Waste Type': 'TOTAL BY MATERIAL', 'User Weight (kg)': '' } as any);
+  Object.keys(totals).forEach(type => {
+    data.push({ 'Waste Type': `${type} Total`, 'User Weight (kg)': totals[type] } as any);
+  });
+  data.push({ 'Waste Type': 'GRAND TOTAL', 'User Weight (kg)': Object.values(totals).reduce((a, b) => a + b, 0) } as any);
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Submissions');
+  XLSX.writeFile(wb, `submissions_${activeStatusTab}_${new Date().toISOString().split('T')[0]}.xlsx`);
+};
+
+const exportToPdf = () => {
+  const printContent = document.querySelector('.bg-white.rounded-2xl.shadow-sm.border.border-gray-100');
+  if (!printContent) return;
+
+  // Calculate totals
+  const totals: Record<string, number> = {};
+  filteredReviews.value.forEach(item => {
+    const type = item.waste_type || 'Other';
+    if (!totals[type]) totals[type] = 0;
+    totals[type] += item.api_weight || 0;
+  });
+
+  const totalsDiv = document.createElement('div');
+  totalsDiv.style.cssText = 'margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 8px;';
+  let totalsHtml = '<h3 style="margin-bottom: 10px;">Total Weight by Material</h3>';
+  totalsHtml += '<table style="width: 100%; border-collapse: collapse;"><tr style="background: #e5e7eb;"><th style="padding: 8px; border: 1px solid #d1d5db; text-align: left;">Material Type</th><th style="padding: 8px; border: 1px solid #d1d5db; text-align: right;">Total Weight (kg)</th></tr>';
+  Object.keys(totals).forEach(type => {
+    totalsHtml += `<tr><td style="padding: 8px; border: 1px solid #d1d5db;">${type}</td><td style="padding: 8px; border: 1px solid #d1d5db; text-align: right;">${(totals[type] || 0).toFixed(2)}</td></tr>`;
+  });
+  const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
+  totalsHtml += `<tr style="background: #d1d5db; font-weight: bold;"><td style="padding: 8px; border: 1px solid #d1d5db;">GRAND TOTAL</td><td style="padding: 8px; border: 1px solid #d1d5db; text-align: right;">${grandTotal.toFixed(2)}</td></tr></table>`;
+  totalsDiv.innerHTML = totalsHtml;
+
+  const clonedContent = (printContent as HTMLElement).cloneNode(true) as HTMLElement;
+  clonedContent.appendChild(totalsDiv);
+
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write('<html><head><title>Submissions Export</title>');
+    printWindow.document.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">');
+    printWindow.document.write('</head><body>');
+    printWindow.document.write(clonedContent.innerHTML);
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.print();
+  }
+};
 </script>
 
 <template>
@@ -102,6 +186,24 @@ watch(() => auth.role, (newRole) => {
       </div>
 
       <div class="flex gap-3">
+        <button 
+          @click="exportToExcel"
+          class="flex items-center px-4 py-2 border border-green-200 text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-all"
+          title="Export to Excel"
+        >
+          <FileSpreadsheet :size="18" class="mr-2" />
+          Excel
+        </button>
+
+        <button 
+          @click="exportToPdf"
+          class="flex items-center px-4 py-2 border border-blue-200 text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all"
+          title="Export to PDF (Print)"
+        >
+          <FileText :size="18" class="mr-2" />
+          PDF
+        </button>
+
         <button 
           @click="showCleanupModal = true"
           class="flex items-center px-4 py-2 border border-red-200 text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-all active:scale-95"
@@ -132,7 +234,7 @@ watch(() => auth.role, (newRole) => {
       </div>
     </div>
 
-    <SubmissionFilters @update:filters="(val) => searchFilters = val" />
+    <SubmissionFilters :machines="machineList" @update:filters="(val) => searchFilters = val" />
 
     <div class="flex space-x-1 bg-gray-100 p-1 rounded-xl w-fit">
       <button v-for="f in ['PENDING', 'VERIFIED', 'REJECTED']" :key="f" 

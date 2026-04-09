@@ -2,6 +2,11 @@
 import { ref, watch } from 'vue';
 import { Search, Filter, X } from 'lucide-vue-next';
 
+// Props for machine data
+const props = defineProps<{
+  machines?: { id: number; deviceNo: string; name: string; address: string }[];
+}>();
+
 // Define what data we pass back to the parent
 const emit = defineEmits(['update:filters']);
 
@@ -9,7 +14,9 @@ const filters = ref({
   search: '',      // For Phone, Machine ID, Record ID
   wasteType: '',   // Dropdown
   startDate: '',
-  endDate: ''
+  endDate: '',
+  machineId: '',   // Filter by Machine ID
+  location: ''     // Filter by Location
 });
 
 // Watch for changes and emit immediately
@@ -19,7 +26,14 @@ watch(filters, (newVal) => {
 
 // Helper to clear all
 const clearFilters = () => {
-  filters.value = { search: '', wasteType: '', startDate: '', endDate: '' };
+  filters.value = { search: '', wasteType: '', startDate: '', endDate: '', machineId: '', location: '' };
+};
+
+// Get unique locations
+const uniqueLocations = () => {
+  if (!props.machines) return [];
+  const locs = new Set(props.machines.map(m => m.address).filter(Boolean));
+  return Array.from(locs).sort();
 };
 </script>
 
@@ -73,6 +87,31 @@ const clearFilters = () => {
             title="End Date"
           />
         </div>
+      </div>
+    </div>
+
+    <!-- Machine Filters -->
+    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+      <div class="md:col-span-2">
+        <select 
+          v-model="filters.machineId"
+          class="block w-full rounded-lg border-gray-300 bg-gray-50 border focus:bg-white focus:ring-blue-500 focus:border-blue-500 sm:text-sm py-2 appearance-none"
+        >
+          <option value="">All Machines</option>
+          <option v-for="m in (machines || [])" :key="m.id" :value="m.deviceNo">
+            {{ m.deviceNo }} - {{ m.name }}
+          </option>
+        </select>
+      </div>
+
+      <div class="md:col-span-2">
+        <select 
+          v-model="filters.location"
+          class="block w-full rounded-lg border-gray-300 bg-gray-50 border focus:bg-white focus:ring-blue-500 focus:border-blue-500 sm:text-sm py-2 appearance-none"
+        >
+          <option value="">All Locations</option>
+          <option v-for="loc in uniqueLocations()" :key="loc" :value="loc">{{ loc }}</option>
+        </select>
       </div>
     </div>
 

@@ -14,7 +14,17 @@ const newRole = ref('VIEWER');
 
 const isPlatformOwner = computed(() => auth.role === 'SUPER_ADMIN' && !auth.merchantId);
 const isViewer = computed(() => auth.role === 'VIEWER');
-const canAddAdmin = computed(() => !isViewer.value);
+const isAgent = computed(() => {
+  const route = window.location.pathname;
+  if (route.includes('agent-dashboard')) return true;
+  return auth.role?.toUpperCase() === 'AGENT';
+});
+const isCollector = computed(() => {
+  const route = window.location.pathname;
+  if (route.includes('collector-dashboard')) return true;
+  return auth.role?.toUpperCase() === 'COLLECTOR';
+});
+const canAddAdmin = computed(() => !isViewer.value && !isAgent.value && !isCollector.value);
 
 const handleAddAdmin = async () => {
     const res = await addAdmin(newEmail.value, newRole.value);
@@ -120,8 +130,8 @@ onMounted(() => {
             </td>
             <td class="px-6 py-4">
               <span :class="`px-2 py-1 text-xs font-bold rounded-full 
-                ${admin.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`">
-                {{ admin.role.replace('_', ' ') }}
+                ${(admin.role as string) === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`">
+                {{ (admin.role as string).replace('_', ' ') }}
               </span>
             </td>
             <td class="px-6 py-4 text-sm text-gray-500">

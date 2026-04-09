@@ -68,6 +68,7 @@ export function useNotifications() {
     }, 30000);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const stopPolling = () => {
     if (pollInterval) {
       clearInterval(pollInterval);
