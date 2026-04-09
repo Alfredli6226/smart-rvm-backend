@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const viteEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
+let viteEnv: Record<string, string | undefined> | undefined;
+try {
+  viteEnv = new Function('return typeof import.meta !== "undefined" ? import.meta.env : undefined')();
+} catch {
+  viteEnv = undefined;
+}
 const processEnv = typeof process !== 'undefined' ? process.env : undefined;
 
 const supabaseUrl = viteEnv?.VITE_SUPABASE_URL || processEnv?.VITE_SUPABASE_URL;
