@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { intakeService } from '../src/services/intakeService';
+import { intakeService } from '../src/services/intakeService.js';
 
 /**
  * Intake API Endpoint

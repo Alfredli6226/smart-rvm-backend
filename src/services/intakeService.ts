@@ -5,8 +5,8 @@
  * with channel/source classification.
  */
 
-import { supabase } from './supabase';
-import type { CustomerServiceTicket, Lead } from '../types';
+import { supabase } from './supabase.js';
+import type { CustomerServiceTicket, Lead } from '../types.js';
 
 export interface IntakePayload {
   // Contact Information
