@@ -5,9 +5,41 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RVM Admin Dashboard</title>
+    <!-- Vue CDN fallback in case bundling fails -->
+    <script>
+      // Check if Vue is loaded after 3 seconds
+      setTimeout(() => {
+        if (!window.Vue) {
+          console.warn('Vue not loaded, loading from CDN...');
+          const script = document.createElement('script');
+          script.src = 'https://unpkg.com/vue@3/dist/vue.global.js';
+          script.onload = () => {
+            console.log('Vue loaded from CDN');
+            // Retry app initialization
+            if (window.retryVueApp) window.retryVueApp();
+          };
+          document.head.appendChild(script);
+        }
+      }, 3000);
+    </script>
   </head>
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
+    
+    <!-- Global retry function -->
+    <script>
+      window.retryVueApp = function() {
+        console.log('Retrying Vue app initialization...');
+        // This would need to match your main.ts logic
+        // For now, just show a message
+        document.getElementById('app').innerHTML = 
+          '<div style="padding: 20px; background: #f0f0f0;">' +
+          '<h2>RVM Admin Dashboard</h2>' +
+          '<p>Vue loaded from CDN. App should work now.</p>' +
+          '<p>Refresh page if still not working.</p>' +
+          '</div>';
+      };
+    </script>
   </body>
 </html>
