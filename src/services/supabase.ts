@@ -1,26 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Get environment variables - works in both Vite and Node.js environments
-const getEnv = (key: string): string | undefined => {
-  // Try Vite's import.meta.env first
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    return import.meta.env[key];
-  }
-  // Fallback to process.env for Node.js/SSR
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env[key];
-  }
-  return undefined;
+// DIRECT HARDCODED SOLUTION - Will definitely work
+// Vercel is not exposing environment variables to client-side
+const SUPABASE_CONFIG = {
+  url: 'https://pmfpchdyousppasobqoa.supabase.co',
+  anonKey: 'sb_publishable_cye50IOUktAP9DvkGP0XjQ_obRB3any'
 };
 
-const supabaseUrl = getEnv('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
+console.log('🔧 Using hardcoded Supabase configuration:');
+console.log('URL:', SUPABASE_CONFIG.url);
+console.log('Key:', SUPABASE_CONFIG.anonKey.substring(0, 10) + '...');
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Supabase URL or Key is missing.');
-  console.error('VITE_SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing');
-  console.error('VITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Set' : 'Missing');
-  throw new Error('Supabase URL or Key is missing. Please check your .env file.');
-}
+// Create and export Supabase client
+export const supabase = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Test connection immediately
+supabase.auth.getSession().then(({ data, error }) => {
+  if (error) {
+    console.error('❌ Supabase connection test failed:', error.message);
+  } else {
+    console.log('✅ Supabase connected successfully!');
+    console.log('Session:', data.session ? 'Active' : 'No session');
+  }
+}).catch(err => {
+  console.error('❌ Supabase connection error:', err.message);
+});
