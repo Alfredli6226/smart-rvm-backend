@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const APP_URL = 'https://rvm-merchant-platform-main-6ttt4awvv-alfredli6226s-projects.vercel.app';
+const APP_URL = 'https://rvm-merchant-platform-main.vercel.app';
 const UCO_DEVICES = ['071582000007', '071582000009'];
 const DEFAULT_LATITUDE = 3.14;
 const DEFAULT_LONGITUDE = 101.68;
