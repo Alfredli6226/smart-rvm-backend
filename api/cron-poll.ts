@@ -1,18 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceRoleKey) {
-  throw new Error('Missing Supabase server credentials for cron-poll');
-}
-
-// Initialize Supabase
-const supabase = createClient(
-  supabaseUrl,
-  supabaseServiceRoleKey
-);
-
 const APP_URL = 'https://rvm-merchant-platform.vercel.app';
 const UCO_DEVICES = ['071582000007', '071582000009'];
 const DEFAULT_LATITUDE = 3.14;
@@ -39,7 +26,15 @@ async function fetchVendorMachineStatusMap() {
 }
 
 export default async function handler(req: any, res: any) {
+  // ✅ All env vars read INSIDE handler
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const cronSecret = process.env.CRON_SECRET;
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return res.status(500).json({ error: 'Missing Supabase server credentials for cron-poll' });
+  }
+
   if (!cronSecret) {
     return res.status(500).json({ error: 'CRON_SECRET missing' });
   }
@@ -47,6 +42,9 @@ export default async function handler(req: any, res: any) {
   if (req.query.key !== cronSecret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
+
+  // ✅ Supabase client created INSIDE handler
+  const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   try {
     const { data: machines, error } = await supabase
@@ -86,17 +84,15 @@ export default async function handler(req: any, res: any) {
             .eq('id', machine.id);
         }
 
-        // --- BIN 1 PROCESSING ---
         const bin1 = Array.isArray(bins) ? bins.find((b: any) => b.positionNo === 1) : null;
         if (bin1) {
-          const wasCleaned = await processBin(machine, 1, bin1.weight, machine.current_bag_weight);
+          const wasCleaned = await processBin(supabase, machine, 1, bin1.weight, machine.current_bag_weight);
           if (wasCleaned) cleaningEvents++;
         }
 
-        // --- BIN 2 PROCESSING ---
         const bin2 = Array.isArray(bins) ? bins.find((b: any) => b.positionNo === 2) : null;
         if (bin2) {
-          const wasCleaned = await processBin(machine, 2, bin2.weight, machine.current_weight_2);
+          const wasCleaned = await processBin(supabase, machine, 2, bin2.weight, machine.current_weight_2);
           if (wasCleaned) cleaningEvents++;
         }
 
@@ -118,14 +114,11 @@ export default async function handler(req: any, res: any) {
   }
 }
 
-// --- HELPER FUNCTION ---
-async function processBin(machine: any, position: number, liveWeightStr: string, dbWeightNum: number): Promise<boolean> {
+async function processBin(supabase: any, machine: any, position: number, liveWeightStr: string, dbWeightNum: number): Promise<boolean> {
     const liveWeight = Number(liveWeightStr || 0);
     const dbWeight = Number(dbWeightNum || 0);
     const DROP_THRESHOLD = 2.0; 
     
-    // ✅ NEW: UCO Glitch Safeguard for Live Poll
-    // If it's a UCO machine and weight drops EXACTLY to 0 (or near 0) from a high number, ignore it.
     if (UCO_DEVICES.includes(machine.device_no) && liveWeight < 0.1 && dbWeight > 5.0) {
         console.log(`⚠️ Ignored UCO sensor glitch on ${machine.device_no}. DB: ${dbWeight}kg, Live: ${liveWeight}kg`);
         return false; 
@@ -134,9 +127,7 @@ async function processBin(machine: any, position: number, liveWeightStr: string,
     const diff = dbWeight - liveWeight;
     let cleaningDetected = false;
 
-    // 1. Detect Drop (Cleaning Event)
     if (diff > DROP_THRESHOLD) {
-        
         const timeWindow = new Date(Date.now() - 45 * 60 * 1000).toISOString();
         const wasteType = position === 1 ? machine.config_bin_1 : machine.config_bin_2;
 
@@ -165,10 +156,7 @@ async function processBin(machine: any, position: number, liveWeightStr: string,
         }
     }
 
-    // 2. Sync Logic (Gradual Increase)
-    // This handles user recycling activity (e.g. 50kg -> 55kg)
     if (Math.abs(liveWeight - dbWeight) > 0.05) {
-        
         if (liveWeight > dbWeight) {
              console.log(`📈 Weight Increased on ${machine.device_no}: ${dbWeight}kg -> ${liveWeight}kg`);
         }
