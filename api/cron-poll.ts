@@ -1,9 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+  throw new Error('Missing Supabase server credentials for cron-poll');
+}
+
 // Initialize Supabase
 const supabase = createClient(
-  process.env.VITE_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  supabaseUrl,
+  supabaseServiceRoleKey
 );
 
 const APP_URL = 'https://rvm-merchant-platform.vercel.app';
@@ -32,8 +39,12 @@ async function fetchVendorMachineStatusMap() {
 }
 
 export default async function handler(req: any, res: any) {
-  
-  if (req.query.key !== process.env.CRON_SECRET) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    return res.status(500).json({ error: 'CRON_SECRET missing' });
+  }
+
+  if (req.query.key !== cronSecret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
