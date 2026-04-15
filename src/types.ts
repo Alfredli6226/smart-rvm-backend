@@ -222,6 +222,18 @@ export interface ApiPutResponse {
   };
 }
 
+export interface ApiNearbyMachine {
+  id?: string | number;
+  deviceNo: string;
+  deviceName?: string;
+  address?: string;
+  sn?: string;
+  status?: number | string;
+  isOnline?: number | string | boolean;
+  latitude?: number | string;
+  longitude?: number | string;
+}
+
 // ==========================================
 // 5. CUSTOMER SERVICE & LEADS TYPES (New)
 // ==========================================

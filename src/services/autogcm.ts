@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Machine } from "../types";
+import type { ApiNearbyMachine, Machine } from "../types";
 
 // 1. Define Proxy URL
 // If Localhost: Use Live Vercel Backend to avoid CORS issues
@@ -25,7 +25,7 @@ async function callApi<T>(endpoint: string, method: 'GET' | 'POST' = 'GET', data
 
 // ✅ 3. Get Nearby RVMs
 // Used to find machines near a coordinate (GPS-based)
-export async function getNearbyRVMs(latitude: number = 3.14, longitude: number = 101.68): Promise<Machine[]> {
+export async function getNearbyRVMs(latitude: number = 3.14, longitude: number = 101.68): Promise<ApiNearbyMachine[]> {
   try {
     const res = await callApi<any>('/api/open/video/v2/nearby', 'GET', { latitude, longitude });
     
@@ -37,6 +37,15 @@ export async function getNearbyRVMs(latitude: number = 3.14, longitude: number =
     console.error("Failed to fetch machine list", error);
     return [];
   }
+}
+
+export async function getMachineStatusSnapshot(latitude: number = 3.14, longitude: number = 101.68): Promise<Record<string, ApiNearbyMachine>> {
+  const machines = await getNearbyRVMs(latitude, longitude);
+  return machines.reduce<Record<string, ApiNearbyMachine>>((acc, machine) => {
+    const deviceNo = String(machine.deviceNo || '').trim();
+    if (deviceNo) acc[deviceNo] = machine;
+    return acc;
+  }, {});
 }
 
 // 4. Sync User / Get User Info
@@ -74,7 +83,7 @@ export async function syncUserAccount(
 }
 
 // 5. Get Individual Machine Status
-// Used by the Store to check status one-by-one (Sequential Fetch)
+// Used by the Store to check bin config/weights
 export async function getMachineConfig(deviceNo: string): Promise<any> {
   try {
     const res = await callApi<any>('/api/open/v1/device/position', 'GET', { deviceNo });
@@ -83,6 +92,32 @@ export async function getMachineConfig(deviceNo: string): Promise<any> {
     console.error(`Failed to fetch config for ${deviceNo}`, error);
     return null;
   }
+}
+
+export function normalizeMachineStatus(snapshot?: ApiNearbyMachine | null) {
+  if (!snapshot) {
+    return {
+      isOnline: false,
+      vendorStatus: null as number | null,
+      vendorStatusText: 'Offline'
+    };
+  }
+
+  const online = Number(snapshot.isOnline) === 1;
+  const status = Number(snapshot.status);
+  const statusMap: Record<number, string> = {
+    0: 'Waiting',
+    1: 'In Use',
+    2: 'Disabled',
+    3: 'Fault',
+    4: 'Unpaid'
+  };
+
+  return {
+    isOnline: online,
+    vendorStatus: Number.isFinite(status) ? status : null,
+    vendorStatusText: statusMap[status] || (online ? 'Online' : 'Offline')
+  };
 }
 
 // ✅ 6. Get User Disposal Records

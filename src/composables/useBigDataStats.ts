@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 import { supabase } from '../services/supabase';
 import { useAuthStore } from '../stores/auth';
-import { getMachineConfig } from '../services/autogcm';
+import { getMachineStatusSnapshot, normalizeMachineStatus } from '../services/autogcm';
 
 export function useBigDataStats() {
   const loading = ref(true);
@@ -46,20 +46,12 @@ export function useBigDataStats() {
       // 1. MACHINES
       const { data: machines } = await supabase.from('machines').select('*');
       if (machines) {
-        const statusPromises = machines.map(async (m) => {
-            let isOnline = false;
-            try {
-                const res = await getMachineConfig(m.device_no);
-                if (res && res.code === 200) isOnline = true;
-            } catch (e) { /* ignore */ }
-            
-            if (!isOnline) {
-                isOnline = m.is_online === true || m.isOnline === true || String(m.status).toUpperCase() === 'ONLINE';
-            }
-            return { ...m, isOnline };
+        const statusSnapshot = await getMachineStatusSnapshot();
+        const results = machines.map((m) => {
+            const vendorState = normalizeMachineStatus(statusSnapshot[String(m.device_no)] || null);
+            const isOnline = vendorState.isOnline || m.is_online === true || m.isOnline === true || String(m.status).toUpperCase() === 'ONLINE';
+            return { ...m, isOnline, vendorStatus: vendorState.vendorStatus, vendorStatusText: vendorState.vendorStatusText };
         });
-
-        const results = await Promise.all(statusPromises);
         machineLocations.value = results;
         totalMachines.value = results.length;
         onlineCount.value = results.filter(m => m.isOnline).length;

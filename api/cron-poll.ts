@@ -8,6 +8,28 @@ const supabase = createClient(
 
 const APP_URL = 'https://rvm-merchant-platform.vercel.app';
 const UCO_DEVICES = ['071582000007', '071582000009'];
+const DEFAULT_LATITUDE = 3.14;
+const DEFAULT_LONGITUDE = 101.68;
+
+async function fetchVendorMachineStatusMap() {
+  const proxyRes = await fetch(`${APP_URL}/api/proxy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      endpoint: '/api/open/video/v2/nearby',
+      method: 'GET',
+      params: { latitude: DEFAULT_LATITUDE, longitude: DEFAULT_LONGITUDE }
+    })
+  });
+
+  const apiRes = await proxyRes.json();
+  const rows = Array.isArray(apiRes?.data) ? apiRes.data : [];
+  return rows.reduce((acc: Record<string, any>, row: any) => {
+    const key = String(row.deviceNo || '').trim();
+    if (key) acc[key] = row;
+    return acc;
+  }, {});
+}
 
 export default async function handler(req: any, res: any) {
   
@@ -25,6 +47,7 @@ export default async function handler(req: any, res: any) {
 
     let updatesCount = 0;
     let cleaningEvents = 0;
+    const vendorStatusMap = await fetchVendorMachineStatusMap();
 
     for (const machine of machines) {
       try {
@@ -40,6 +63,17 @@ export default async function handler(req: any, res: any) {
 
         const apiRes = await proxyRes.json();
         const bins = (apiRes && apiRes.data) ? apiRes.data : [];
+        const vendorStatus = vendorStatusMap[String(machine.device_no)] || null;
+
+        if (vendorStatus) {
+          await supabase
+            .from('machines')
+            .update({
+              is_online: Number(vendorStatus.isOnline) === 1,
+              status: Number(vendorStatus.status)
+            })
+            .eq('id', machine.id);
+        }
 
         // --- BIN 1 PROCESSING ---
         const bin1 = Array.isArray(bins) ? bins.find((b: any) => b.positionNo === 1) : null;

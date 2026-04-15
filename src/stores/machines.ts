@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '../services/supabase';
-import { getMachineConfig } from '../services/autogcm';
+import { getMachineConfig, getMachineStatusSnapshot, normalizeMachineStatus } from '../services/autogcm';
 import { useAuthStore } from './auth';
 import { useViewerAssignments } from '../composables/useViewerAssignments';
 
@@ -169,8 +169,14 @@ export const useMachineStore = defineStore('machines', () => {
 
       // Execute Query
       const { data: dbMachines, error } = await query
-        .eq('is_active', true)
         .order('zone', { ascending: true });
+
+      console.log('MachineStore: fetched machine rows', {
+        role: auth.role,
+        merchantId: auth.merchantId,
+        count: dbMachines?.length || 0,
+        deviceNos: (dbMachines || []).map((m: any) => m.device_no)
+      });
 
       if (error) throw error;
 
@@ -182,16 +188,19 @@ export const useMachineStore = defineStore('machines', () => {
          return;
       }
 
+      const statusSnapshot = await getMachineStatusSnapshot();
+
       // --- LOOP LOGIC ---
       for (const dbMachine of dbMachines) {
         let apiRes = null;
-        let isOnline = false;
         let statusCode = 0; 
         let statusText = "Offline";
+        const vendorSnapshot = statusSnapshot[String(dbMachine.device_no)] || null;
+        const vendorState = normalizeMachineStatus(vendorSnapshot);
+        let isOnline = vendorState.isOnline;
         
         try {
              apiRes = await getMachineConfig(dbMachine.device_no);
-             if (apiRes && apiRes.code === 200) isOnline = true;
         } catch (e) { /* Ignore */ }
 
         const apiConfigs = apiRes?.data || [];
@@ -246,26 +255,30 @@ export const useMachineStore = defineStore('machines', () => {
         }
 
         // Status
-        const isManualOffline = dbMachine.is_manual_offline === true; // Must exist in DB
+        const isManualOffline = dbMachine.is_manual_offline === true;
         
-        const hasFault = apiConfigs.some((c: any) => c.status === 2 || c.status === 3);
-        const hasActivity = apiConfigs.some((c: any) => c.status === 1);
+        const hasFault = apiConfigs.some((c: any) => c.status === 2 || c.status === 3) || vendorState.vendorStatus === 3;
+        const hasActivity = apiConfigs.some((c: any) => c.status === 1) || vendorState.vendorStatus === 1;
         const anyBinFull = compartments.some(c => c.isFull);
+        const vendorDisabled = vendorState.vendorStatus === 2;
+        const vendorUnpaid = vendorState.vendorStatus === 4;
 
         // Priority Logic
         if (isManualOffline) {
-            statusCode = 3; // Use maintenance color (Yellow) or Offline (Grey)
+            statusCode = 3;
             statusText = "Maintenance (Manual)";
-            isOnline = false; // Force offline for UI logic
+            isOnline = false;
         }
         else if (!isOnline) { statusCode = 0; statusText = "Offline"; }
+        else if (vendorDisabled) { statusCode = 3; statusText = "Disabled"; }
+        else if (vendorUnpaid) { statusCode = 3; statusText = "Unpaid"; }
         else if (anyBinFull) { statusCode = 4; statusText = "Bin Full"; } 
         else if (hasFault) { statusCode = 3; statusText = "Maintenance"; }
         else if (hasActivity) { statusCode = 1; statusText = "In Use"; }
-        else { statusCode = 0; statusText = "Online"; }
+        else { statusCode = 2; statusText = vendorState.vendorStatusText === 'Waiting' ? 'Online' : vendorState.vendorStatusText; }
 
         // Sync
-        if (isOnline) {
+        if (isOnline && ('current_bag_weight' in dbMachine || 'current_weight_2' in dbMachine)) {
              const w1 = Number(bin1.weight);
              const w2 = Number(bin2.weight);
              if (Math.abs(w1 - rawWeight1) > 0.05 || Math.abs(w2 - rawWeight2) > 0.05) {
@@ -298,6 +311,12 @@ export const useMachineStore = defineStore('machines', () => {
         
         await sleep(100); 
       }
+
+      console.log('MachineStore: computed machine statuses', tempMachines.map(m => ({
+        deviceNo: m.deviceNo,
+        isOnline: m.isOnline,
+        statusText: m.statusText
+      })));
 
       machines.value = tempMachines;
       lastUpdated.value = Date.now();
