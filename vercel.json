@@ -12,6 +12,22 @@
       "dest": "/api/$1.js"
     },
     {
+      "src": "/dashboard",
+      "dest": "/dist/dashboard.html"
+    },
+    {
+      "src": "/dashboard.html",
+      "dest": "/dist/dashboard.html"
+    },
+    {
+      "src": "/login",
+      "dest": "/dist/index.html"
+    },
+    {
+      "src": "/",
+      "dest": "/dist/index.html"
+    },
+    {
       "src": "/(.*)",
       "dest": "/dist/$1"
     }
