@@ -4,19 +4,51 @@
     {
       "src": "dist/index.html",
       "use": "@vercel/static"
+    },
+    {
+      "src": "api/health.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/users.ts",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/data-sync.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/notifications.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/reports.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1.js"
+      "src": "/api/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/api/users",
+      "dest": "/api/users.ts"
+    },
+    {
+      "src": "/api/data-sync",
+      "dest": "/api/data-sync.js"
+    },
+    {
+      "src": "/api/notifications",
+      "dest": "/api/notifications.js"
+    },
+    {
+      "src": "/api/reports",
+      "dest": "/api/reports.js"
     },
     {
       "src": "/dashboard",
-      "dest": "/dist/dashboard.html"
-    },
-    {
-      "src": "/dashboard.html",
       "dest": "/dist/dashboard.html"
     },
     {
