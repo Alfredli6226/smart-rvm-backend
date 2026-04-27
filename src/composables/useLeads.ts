@@ -3,10 +3,30 @@ import { supabase } from '../services/supabase';
 import type { Lead, LeadFilters } from '../types';
 
 const now = () => new Date().toISOString();
-const mockLeads: Lead[] = [
-  { id: 'lead-1', lead_number: 'LD-0001', company_name: 'ABC Restaurant Group', contact_person: 'Jason Lim', email: 'jason@example.com', phone: '+60123456789', inquiry_type: 'food_waste_machine', description: '8 outlets in KL, wants quotation urgently', currency: 'MYR', status: 'Qualified', lead_score: 'hot', confidence_score: 92, source: 'website', assigned_to: 'Alfred', next_follow_up: now(), ai_summary: 'High-value F&B lead with urgent quotation request.', ai_tags: ['quotation', 'corporate'], created_at: now(), updated_at: now() },
-  { id: 'lead-2', lead_number: 'LD-0002', company_name: 'Eco Retail', contact_person: 'Sarah', email: 'sarah@example.com', phone: '+60112223344', inquiry_type: 'rvm', description: 'Retail traffic campaign interest', currency: 'MYR', status: 'New', lead_score: 'warm', confidence_score: 76, source: 'facebook', assigned_to: 'Sales Team', next_follow_up: now(), ai_summary: 'Potential RVM partnership lead.', ai_tags: ['rvm', 'retail'], created_at: now(), updated_at: now() }
-];
+
+const normalizeLead = (row: Record<string, any>): Lead => ({
+  id: row.id,
+  lead_number: row.lead_number || String(row.id).slice(0, 8).toUpperCase(),
+  company_name: row.company_name,
+  contact_person: row.customer_name || row.company_name || 'Unknown Lead',
+  email: row.customer_email || '',
+  phone: row.customer_phone,
+  inquiry_type: row.interest_type || 'general',
+  description: row.ai_summary || row.location || row.timeline || '',
+  estimated_value: undefined,
+  currency: 'MYR',
+  status: String(row.status || 'new').replace(/_/g, ' ').replace(/(^|\s)(\w)/g, (_, p1, p2) => `${p1}${p2.toUpperCase()}`) as Lead['status'],
+  lead_score: row.score || 'warm',
+  confidence_score: Number(row.ai_confidence || 0),
+  source: row.source || 'unknown',
+  assigned_to: row.assigned_to,
+  next_follow_up: row.next_follow_up_at,
+  ai_summary: row.ai_summary,
+  ai_tags: [],
+  created_at: row.created_at || now(),
+  updated_at: row.updated_at || row.created_at || now(),
+  notes: [row.budget_range, row.timeline, row.location].filter(Boolean).join(' | '),
+});
 
 export function useLeads() {
   const leads = ref<Lead[]>([]);
@@ -31,25 +51,35 @@ export function useLeads() {
     try {
       const { data, error } = await supabase.from('customer_service_leads').select('*').order('updated_at', { ascending: false });
       if (error) throw error;
-      leads.value = applyLocalFilter((data as Lead[]) || [], filter);
+      leads.value = applyLocalFilter(((data as Record<string, any>[]) || []).map(normalizeLead), filter);
       usingMock.value = false;
     } catch (e) {
-      console.warn('Using mock leads data', e);
-      leads.value = applyLocalFilter(mockLeads, filter);
-      usingMock.value = true;
+      console.warn('Failed to load leads data', e);
+      leads.value = [];
+      usingMock.value = false;
     } finally {
       loading.value = false;
     }
   };
 
   const updateLead = async (id: string, patch: Partial<Lead>) => {
-    try {
-      const { error } = await supabase.from('customer_service_leads').update({ ...patch, updated_at: now() }).eq('id', id);
-      if (error) throw error;
-    } catch {
-      const idx = mockLeads.findIndex(l => l.id === id);
-      if (idx >= 0) mockLeads[idx] = { ...mockLeads[idx], ...patch, updated_at: now() } as Lead;
-    }
+    const payload = {
+      customer_name: patch.contact_person,
+      customer_email: patch.email,
+      customer_phone: patch.phone,
+      company_name: patch.company_name,
+      interest_type: patch.inquiry_type,
+      source: patch.source,
+      score: patch.lead_score,
+      status: patch.status?.toLowerCase().replace(/\s+/g, '_'),
+      ai_summary: patch.ai_summary,
+      ai_confidence: patch.confidence_score,
+      assigned_to: patch.assigned_to,
+      next_follow_up_at: patch.next_follow_up,
+      updated_at: now(),
+    };
+    const { error } = await supabase.from('customer_service_leads').update(payload).eq('id', id);
+    if (error) throw error;
     await loadLeads();
   };
 

@@ -19,10 +19,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 3. Get Secrets
-  // Note: We use the names from your .env file here
-  const SECRET = process.env.VITE_API_SECRET; 
-  const MERCHANT_NO = process.env.VITE_MERCHANT_NO;
-  const API_BASE = "https://api.autogcm.com"; // Global Server
+  // Prefer server-only env names, fall back to legacy VITE names during transition.
+  const SECRET = (process.env.API_SECRET || process.env.VITE_API_SECRET || '').trim(); 
+  const MERCHANT_NO = (process.env.MERCHANT_NO || process.env.VITE_MERCHANT_NO || '').trim();
+  const API_BASE = "https://api.autogcm.com";
 
   // 4. Debugging: Check if secrets exist
   if (!SECRET || !MERCHANT_NO) {

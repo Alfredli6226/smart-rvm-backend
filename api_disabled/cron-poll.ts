@@ -64,68 +64,162 @@ export default async function handler(req: any, res: any) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // ✅ Supabase client created INSIDE handler
-  const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-
   console.log('Cron-poll started');
   
-  // First, just test Supabase connection
   try {
-    const { data: machines, error } = await supabase
-      .from('machines')
-      .select('*')
-      .eq('is_active', true);
-
-    if (error) throw error;
+    // Try to create Supabase client, but handle failure gracefully
+    let supabase = null;
+    let machines = [];
+    
+    try {
+      supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      console.log('Supabase client created');
+      
+      // Try to query machines
+      const { data, error } = await supabase
+        .from('machines')
+        .select('*')
+        .eq('is_active', true);
+      
+      if (error) {
+        console.error('Supabase query error:', error);
+        // Continue with empty machines list
+      } else {
+        machines = data || [];
+        console.log(`Found ${machines.length} machines in database`);
+      }
+    } catch (supabaseError) {
+      console.warn('Supabase client creation or query failed, continuing without database:', supabaseError?.message);
+      supabase = null;
+      machines = [];
+    }
 
     let updatesCount = 0;
     let cleaningEvents = 0;
     const vendorStatusMap = await fetchVendorMachineStatusMap();
 
-    for (const machine of machines) {
+    // Process machines in parallel with timeout for ~30 second total response
+    const machinePromises = machines.map(async (machine) => {
+      const startTime = Date.now();
+      const timeoutMs = 5000; // 5 seconds max per machine
+      
       try {
-        const proxyRes = await fetch(`${APP_URL}/api/proxy`, {
+        // Create a timeout promise
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs);
+        });
+        
+        // Race between fetch and timeout
+        const proxyRes = await Promise.race([
+          fetch(`${APP_URL}/api/proxy`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                endpoint: '/api/open/v1/device/position',
-                method: 'GET',
-                params: { deviceNo: machine.device_no }
+              endpoint: '/api/open/v1/device/position',
+              method: 'GET',
+              params: { deviceNo: machine.device_no }
             })
-        });
+          }),
+          timeoutPromise
+        ]);
 
-        const apiRes = await proxyRes.json();
+        const apiRes = await (proxyRes as Response).json();
         const bins = (apiRes && apiRes.data) ? apiRes.data : [];
         const vendorStatus = vendorStatusMap[String(machine.device_no)] || null;
 
-        if (vendorStatus) {
-          await supabase
-            .from('machines')
-            .update({
-              is_online: Number(vendorStatus.isOnline) === 1,
-              status: Number(vendorStatus.status)
-            })
-            .eq('id', machine.id);
+        let machineUpdated = false;
+        let machineCleaned = 0;
+
+        // Update machine status if vendor data available
+        if (vendorStatus && supabase) {
+          try {
+            await supabase
+              .from('machines')
+              .update({
+                is_online: Number(vendorStatus.isOnline) === 1,
+                status: Number(vendorStatus.status)
+              })
+              .eq('id', machine.id);
+            machineUpdated = true;
+          } catch (updateError) {
+            console.error(`Failed to update machine ${machine.device_no}:`, updateError);
+          }
         }
 
+        // Process bin 1
         const bin1 = Array.isArray(bins) ? bins.find((b: any) => b.positionNo === 1) : null;
-        if (bin1) {
-          const wasCleaned = await processBin(supabase, machine, 1, bin1.weight, machine.current_bag_weight);
-          if (wasCleaned) cleaningEvents++;
+        if (bin1 && supabase) {
+          try {
+            const wasCleaned = await processBin(supabase, machine, 1, bin1.weight, machine.current_bag_weight);
+            if (wasCleaned) machineCleaned++;
+          } catch (binError) {
+            console.error(`Failed to process bin1 for ${machine.device_no}:`, binError);
+          }
         }
 
+        // Process bin 2
         const bin2 = Array.isArray(bins) ? bins.find((b: any) => b.positionNo === 2) : null;
-        if (bin2) {
-          const wasCleaned = await processBin(supabase, machine, 2, bin2.weight, machine.current_weight_2);
-          if (wasCleaned) cleaningEvents++;
+        if (bin2 && supabase) {
+          try {
+            const wasCleaned = await processBin(supabase, machine, 2, bin2.weight, machine.current_weight_2);
+            if (wasCleaned) machineCleaned++;
+          } catch (binError) {
+            console.error(`Failed to process bin2 for ${machine.device_no}:`, binError);
+          }
         }
 
-        updatesCount++;
-
-      } catch (innerErr) {
-        console.error(`Error processing ${machine.device_no}:`, innerErr);
+        const processingTime = Date.now() - startTime;
+        console.log(`✅ Processed ${machine.device_no} in ${processingTime}ms (updated: ${machineUpdated}, cleaned: ${machineCleaned})`);
+        
+        return {
+          deviceNo: machine.device_no,
+          success: true,
+          updated: machineUpdated,
+          cleaned: machineCleaned,
+          timeMs: processingTime
+        };
+        
+      } catch (error) {
+        const processingTime = Date.now() - startTime;
+        console.error(`❌ Error processing ${machine.device_no} after ${processingTime}ms:`, error.message);
+        
+        return {
+          deviceNo: machine.device_no,
+          success: false,
+          error: error.message,
+          timeMs: processingTime
+        };
       }
+    });
+
+    // Wait for all machines with overall timeout
+    const overallTimeoutMs = 30000; // 30 seconds total
+    const overallTimeoutPromise = new Promise((resolve) => {
+      setTimeout(() => resolve('timeout'), overallTimeoutMs);
+    });
+    
+    let results = await Promise.race([
+      Promise.allSettled(machinePromises),
+      overallTimeoutPromise
+    ]);
+    
+    if (results === 'timeout') {
+      console.log(`⚠️ Overall timeout after ${overallTimeoutMs}ms, returning partial results`);
+      // Get whatever results we have so far
+      const settledResults = await Promise.allSettled(machinePromises);
+      results = settledResults;
     }
+    
+    // Process results
+    const successfulResults = (results as PromiseSettledResult<any>[])
+      .filter(r => r.status === 'fulfilled' && r.value.success)
+      .map(r => (r as PromiseFulfilledResult<any>).value);
+    
+    updatesCount = successfulResults.length;
+    cleaningEvents = successfulResults.reduce((sum, r) => sum + (r.cleaned || 0), 0);
+    
+    const totalTime = successfulResults.reduce((sum, r) => sum + (r.timeMs || 0), 0);
+    console.log(`📊 Processed ${updatesCount}/${machines.length} machines in ${totalTime}ms, ${cleaningEvents} cleaning events`);
 
     return res.status(200).json({ 
       success: true, 

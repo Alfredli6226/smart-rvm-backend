@@ -175,23 +175,23 @@ class IntakeService {
     const leadNumber = await this.generateLeadNumber();
     
     const leadData = {
-      lead_number: leadNumber,
-      contact_person: payload.name,
-      email: payload.email,
-      phone: payload.phone,
+      customer_name: payload.name,
+      customer_email: payload.email,
+      customer_phone: payload.phone,
       company_name: payload.company,
-      inquiry_type: payload.inquiryType || classification.category,
-      description: payload.message,
-      status: 'New' as const,
-      lead_score: classification.leadScore,
       source: payload.source || payload.channel,
-      ai_tags: classification.tags,
-      custom_fields: {
-        ...payload.metadata?.customFields,
-        campaign: payload.campaign,
-        referral: payload.referral,
-        intake_source: payload.channel,
-      },
+      interest_type: payload.inquiryType || classification.category,
+      score: classification.leadScore,
+      status: 'new',
+      budget_range: payload.metadata?.customFields?.budgetRange,
+      timeline: payload.metadata?.customFields?.timeline,
+      location: payload.metadata?.location,
+      ai_summary: `${leadNumber}: ${payload.subject || payload.message.substring(0, 120)}`,
+      ai_confidence: classification.leadScore === 'hot' ? 0.9 : classification.leadScore === 'warm' ? 0.7 : 0.5,
+      next_follow_up_at: null,
+      assigned_to: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
     try {
@@ -203,10 +203,22 @@ class IntakeService {
 
       if (error) throw error;
 
+      const normalizedLead = {
+        ...(data as Record<string, any>),
+        lead_number: leadNumber,
+        contact_person: payload.name || payload.company || 'Unknown Lead',
+        email: payload.email || '',
+        phone: payload.phone,
+        inquiry_type: payload.inquiryType || classification.category,
+        lead_score: classification.leadScore,
+        confidence_score: classification.leadScore === 'hot' ? 90 : classification.leadScore === 'warm' ? 70 : 50,
+        currency: 'MYR',
+      } as Lead;
+
       return {
         success: true,
         leadId: data.id,
-        lead: data as Lead,
+        lead: normalizedLead,
         message: `Lead ${leadNumber} created successfully`,
       };
     } catch (error) {

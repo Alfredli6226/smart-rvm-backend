@@ -217,31 +217,52 @@ export function useSubmissionReviews() {
 
     const verifySubmission = async (reviewId: string, finalWeight: number, currentRate: number) => {
         try {
-            // This line was already good, keep it!
             const finalPoints = parseFloat((finalWeight * currentRate).toFixed(2));
+            const reviewedAt = new Date().toISOString();
 
             const { data: review, error: fetchError } = await supabase
                 .from('submission_reviews')
-                .select('user_id, merchant_id')
+                .select('id, user_id, merchant_id, status, waste_type, device_no, vendor_record_id')
                 .eq('id', reviewId)
                 .single();
 
-            if (fetchError || !review) throw new Error("Review not found");
+            if (fetchError || !review) throw new Error('Review not found');
+            if (review.status === 'VERIFIED') {
+                console.warn(`Submission ${reviewId} already verified, skipping duplicate credit.`);
+                return true;
+            }
 
-            // 2. UPDATE REVIEW STATUS
             const { error: updateError } = await supabase
                 .from('submission_reviews')
                 .update({
                     status: 'VERIFIED',
                     confirmed_weight: finalWeight,
-                    calculated_value: finalPoints, // ✅ FIXED: DB Column is 'calculated_value'
-                    reviewed_at: new Date().toISOString()
+                    calculated_value: finalPoints,
+                    reviewed_at: reviewedAt,
+                    reviewer_note: null,
                 })
-                .eq('id', reviewId);
+                .eq('id', reviewId)
+                .neq('status', 'VERIFIED');
 
             if (updateError) throw updateError;
 
-            // 3. CREDIT MERCHANT WALLET (The Money Part)
+            const txDescription = `Recycled ${finalWeight}kg ${review.waste_type || 'material'} (Verified)`;
+            const { data: existingTx } = await supabase
+                .from('wallet_transactions')
+                .select('id, balance_after')
+                .eq('user_id', review.user_id)
+                .eq('merchant_id', review.merchant_id)
+                .eq('transaction_type', 'RECYCLE_EARNING')
+                .eq('description', txDescription)
+                .limit(1)
+                .maybeSingle();
+
+            if (existingTx) {
+                console.warn(`Wallet transaction already exists for submission ${reviewId}, skipping duplicate credit.`);
+                await fetchReviews();
+                return true;
+            }
+
             const { data: wallet } = await supabase
                 .from('merchant_wallets')
                 .select('id, current_balance, total_earnings, total_weight')
@@ -252,40 +273,41 @@ export function useSubmissionReviews() {
             let newBalance = finalPoints;
 
             if (wallet) {
-                // 🟢 FIX 2: Rounding during addition
-                // JavaScript: 10.1 + 1.1 = 11.2000000000001
                 newBalance = Number((Number(wallet.current_balance) + finalPoints).toFixed(2));
-                
                 const newTotalEarnings = Number((Number(wallet.total_earnings) + finalPoints).toFixed(2));
-                const newTotalWeight = Number((Number(wallet.total_weight || 0) + finalWeight).toFixed(3)); // Weight to 3 decimals
+                const newTotalWeight = Number((Number(wallet.total_weight || 0) + finalWeight).toFixed(3));
 
-                await supabase.from('merchant_wallets').update({
+                const { error: walletUpdateError } = await supabase.from('merchant_wallets').update({
                     current_balance: newBalance,
                     total_earnings: newTotalEarnings,
-                    total_weight: newTotalWeight
+                    total_weight: newTotalWeight,
                 }).eq('id', wallet.id);
+
+                if (walletUpdateError) throw walletUpdateError;
             } else {
-                // Create new wallet
-                await supabase.from('merchant_wallets').insert({
+                const { error: walletInsertError } = await supabase.from('merchant_wallets').insert({
                     user_id: review.user_id,
                     merchant_id: review.merchant_id,
                     current_balance: finalPoints,
                     total_earnings: finalPoints,
-                    total_weight: finalWeight
+                    total_weight: finalWeight,
                 });
+
+                if (walletInsertError) throw walletInsertError;
             }
 
-            // 4. LOG TRANSACTION (The Audit Trail)
-            await supabase.from('wallet_transactions').insert({
+            const { error: txError } = await supabase.from('wallet_transactions').insert({
                 user_id: review.user_id,
                 merchant_id: review.merchant_id,
                 amount: finalPoints,
                 balance_after: newBalance,
                 transaction_type: 'RECYCLE_EARNING',
-                description: `Recycled ${finalWeight}kg (Verified)`
+                description: txDescription,
+                created_at: reviewedAt,
             });
 
-            // 5. UPDATE USER STATS
+            if (txError) throw txError;
+
             const { data: user } = await supabase
                 .from('users')
                 .select('lifetime_integral, total_weight')
@@ -293,20 +315,21 @@ export function useSubmissionReviews() {
                 .single();
 
             if (user) {
-                // 🟢 FIX 3: Round User Totals too
                 const newLifetime = Number(((Number(user.lifetime_integral) || 0) + finalPoints).toFixed(2));
                 const newTotalWeight = Number(((Number(user.total_weight) || 0) + finalWeight).toFixed(3));
 
-                await supabase.from('users').update({
+                const { error: userUpdateError } = await supabase.from('users').update({
                     lifetime_integral: newLifetime,
-                    total_weight: newTotalWeight
+                    total_weight: newTotalWeight,
                 }).eq('id', review.user_id);
+
+                if (userUpdateError) throw userUpdateError;
             }
 
             await fetchReviews();
             return true;
         } catch (err) {
-            console.error("Verification failed:", err);
+            console.error('Verification failed:', err);
             return false;
         }
     };

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RVM Combined Backend Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { background: #007bff; color: white; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+        .card { background: white; padding: 25px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        .user-card { background: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #28a745; }
+        .stats { display: flex; gap: 20px; flex-wrap: wrap; }
+        .stat-box { flex: 1; min-width: 200px; background: white; padding: 20px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 2em; font-weight: bold; color: #007bff; }
+        .stat-label { color: #666; margin-top: 5px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 10px 5px; }
+        .loading { color: #666; font-style: italic; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 RVM Combined Backend Dashboard</h1>
+            <p>Showing all users from our combined backend (vendor API + mock data)</p>
+        </div>
+        
+        <div class="card">
+            <h2>📊 System Status</h2>
+            <div class="stats" id="system-status">
+                <div class="loading">Loading system status...</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>👥 Users from Combined Backend</h2>
+            <div style="margin-bottom: 20px;">
+                <button onclick="loadUsers('all')">All Users</button>
+                <button onclick="loadUsers('top_recyclers')">Top Recyclers</button>
+                <button onclick="loadUsers('new_registers')">New Registers</button>
+                <button onclick="loadUsers('active')">Active Users</button>
+            </div>
+            <div id="users-container">
+                <div class="loading">Loading users...</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>🤖 Machine Status</h2>
+            <div id="machine-status">
+                <div class="loading">Loading machine status...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Load system status
+        async function loadSystemStatus() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                
+                document.getElementById('system-status').innerHTML = `
+                    <div class="stat-box">
+                        <div class="stat-value">✅</div>
+                        <div class="stat-label">System Status</div>
+                        <div>${data.status}</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${data.version}</div>
+                        <div class="stat-label">Version</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${new Date(data.timestamp).toLocaleTimeString()}</div>
+                        <div class="stat-label">Last Updated</div>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('system-status').innerHTML = 
+                    `<div class="error">❌ Error loading system status: ${error.message}</div>`;
+            }
+        }
+        
+        // Load users
+        async function loadUsers(filter = 'all') {
+            const container = document.getElementById('users-container');
+            container.innerHTML = '<div class="loading">Loading users...</div>';
+            
+            try {
+                const response = await fetch(`/api/users-fallback?filter_type=${filter}&limit=20`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    let html = `<h3>${data.pagination.total} Users Found (${filter})</h3>`;
+                    html += '<div class="user-grid">';
+                    
+                    data.data.forEach(user => {
+                        html += `
+                            <div class="user-card">
+                                <strong>${user.nickname}</strong> (${user.id})<br>
+                                📊 Weight: ${user.total_weight}kg<br>
+                                ⭐ Points: ${user.total_points}<br>
+                                📅 Joined: ${new Date(user.created_at).toLocaleDateString()}<br>
+                                🔧 Status: ${user.status}
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<div class="error">❌ API Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">❌ Error loading users: ${error.message}</div>`;
+            }
+        }
+        
+        // Load machine status
+        async function loadMachineStatus() {
+            try {
+                const response = await fetch('/api/user-analytics?endpoint=stats');
+                const data = await response.json();
+                
+                document.getElementById('machine-status').innerHTML = `
+                    <div class="stats">
+                        <div class="stat-box">
+                            <div class="stat-value">${data.activeMachines}/${data.totalMachines}</div>
+                            <div class="stat-label">Active Machines</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${data.totalUsers || 0}</div>
+                            <div class="stat-label">Total Users</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${data.totalSubmissions || 0}</div>
+                            <div class="stat-label">Total Submissions</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${new Date(data.lastUpdated).toLocaleTimeString()}</div>
+                            <div class="stat-label">Last Updated</div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('machine-status').innerHTML = 
+                    `<div class="error">❌ Error loading machine status: ${error.message}</div>`;
+            }
+        }
+        
+        // Initialize
+        loadSystemStatus();
+        loadUsers('all');
+        loadMachineStatus();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            loadSystemStatus();
+            loadMachineStatus();
+        }, 30000);
+    </script>
+</body>
+</html>

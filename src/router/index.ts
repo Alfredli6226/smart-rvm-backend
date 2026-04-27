@@ -19,6 +19,7 @@ import ReportsView from '../views/ReportsView.vue';
 import CustomerServiceInbox from '../views/CustomerServiceInbox.vue';
 import CustomerThreadDetail from '../views/CustomerThreadDetail.vue';
 import LeadsManager from '../views/LeadsManager.vue';
+import AIVerificationDashboard from '../views/AIVerificationDashboard.vue';
 
 const MerchantsManager = () => import('../views/SuperAdmin/Merchants.vue');
 const ManageClientSettings = () => import('../views/SuperAdmin/ManageClientSettings.vue');
@@ -185,6 +186,12 @@ const router = createRouter({
           name: 'Reports',
           component: ReportsView,
           meta: { title: 'Reports' } 
+        },
+        {
+          path: 'ai-verification',
+          name: 'AIVerification',
+          component: AIVerificationDashboard,
+          meta: { title: 'AI Verification' } 
         },
       ]
     }

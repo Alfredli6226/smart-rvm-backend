@@ -1,0 +1,214 @@
+(118, 75, 162, 0.8)',
+                                'rgba(255, 215, 0, 0.8)',
+                                'rgba(255, 165, 0, 0.8)',
+                                'rgba(255, 99, 71, 0.8)'
+                            ],
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            title: {
+                                display: true,
+                                text: 'Machine Usage (Total Submissions)'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Submissions'
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Waste Type Chart
+                const wasteCtx = document.getElementById('wasteChart').getContext('2d');
+                if (wasteChart) wasteChart.destroy();
+                
+                wasteChart = new Chart(wasteCtx, {
+                    type: 'polarArea',
+                    data: {
+                        labels: ['Plastic', 'Paper', 'UCO', 'Aluminum', 'Mixed'],
+                        datasets: [{
+                            data: [45, 25, 15, 10, 5],
+                            backgroundColor: [
+                                'rgba(102, 126, 234, 0.8)',
+                                'rgba(118, 75, 162, 0.8)',
+                                'rgba(255, 215, 0, 0.8)',
+                                'rgba(255, 165, 0, 0.8)',
+                                'rgba(255, 99, 71, 0.8)'
+                            ],
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                            },
+                            title: {
+                                display: true,
+                                text: 'Waste Type Distribution'
+                            }
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Error loading charts:', error);
+            }
+        }
+        
+        async function loadUsers() {
+            try {
+                // Mock user data based on actual discoveries
+                const users = [
+                    {
+                        id: '1404752',
+                        name: 'Active Recycler',
+                        phone: 'N/A',
+                        recycled: '3.35 kg',
+                        points: '0.67',
+                        lastActivity: 'Today 15:43',
+                        status: 'active'
+                    },
+                    {
+                        id: '1378848',
+                        name: 'Regular User',
+                        phone: 'N/A',
+                        recycled: '12.8 kg',
+                        points: '9.60',
+                        lastActivity: 'Today 14:26',
+                        status: 'active'
+                    },
+                    {
+                        id: '1378850',
+                        name: 'New User',
+                        phone: 'N/A',
+                        recycled: '5.35 kg',
+                        points: '1.07',
+                        lastActivity: 'Today 13:23',
+                        status: 'active'
+                    },
+                    {
+                        id: '1173008',
+                        name: 'Sindylee',
+                        phone: '0166927737',
+                        recycled: '21.37 kg',
+                        points: '21.37',
+                        lastActivity: '2026-01-21',
+                        status: 'active'
+                    },
+                    {
+                        id: '1418956',
+                        name: 'Recent User',
+                        phone: 'N/A',
+                        recycled: '3.3 kg',
+                        points: '0.66',
+                        lastActivity: 'Today 09:16',
+                        status: 'active'
+                    },
+                    {
+                        id: '1403540',
+                        name: 'Points Adjusted',
+                        phone: 'N/A',
+                        recycled: '0 kg',
+                        points: '-8.52',
+                        lastActivity: 'Today 13:54',
+                        status: 'inactive'
+                    }
+                ];
+                
+                const tableBody = document.getElementById('usersTableBody');
+                tableBody.innerHTML = '';
+                
+                users.forEach(user => {
+                    const row = document.createElement('tr');
+                    
+                    // User cell with avatar
+                    const userCell = document.createElement('td');
+                    userCell.className = 'user-cell';
+                    userCell.innerHTML = `
+                        <div class="user-avatar">${user.name.charAt(0)}</div>
+                        <div>
+                            <div style="font-weight: 600;">${user.name}</div>
+                            <div style="font-size: 0.8rem; color: #666;">ID: ${user.id}</div>
+                        </div>
+                    `;
+                    
+                    // Phone cell
+                    const phoneCell = document.createElement('td');
+                    phoneCell.textContent = user.phone;
+                    
+                    // Recycled cell
+                    const recycledCell = document.createElement('td');
+                    recycledCell.innerHTML = `<strong>${user.recycled}</strong>`;
+                    
+                    // Points cell
+                    const pointsCell = document.createElement('td');
+                    pointsCell.innerHTML = `<span class="points-badge">${user.points} pts</span>`;
+                    
+                    // Last activity cell
+                    const activityCell = document.createElement('td');
+                    activityCell.textContent = user.lastActivity;
+                    
+                    // Status cell
+                    const statusCell = document.createElement('td');
+                    const statusClass = user.status === 'active' ? 'status-active' : 'status-inactive';
+                    statusCell.innerHTML = `<span class="status-badge ${statusClass}">${user.status.toUpperCase()}</span>`;
+                    
+                    // Append cells to row
+                    row.appendChild(userCell);
+                    row.appendChild(phoneCell);
+                    row.appendChild(recycledCell);
+                    row.appendChild(pointsCell);
+                    row.appendChild(activityCell);
+                    row.appendChild(statusCell);
+                    
+                    tableBody.appendChild(row);
+                });
+                
+                hideLoading();
+                
+            } catch (error) {
+                console.error('Error loading users:', error);
+                hideLoading();
+            }
+        }
+        
+        function updateLastUpdated() {
+            lastUpdateTime = new Date();
+            const formattedTime = lastUpdateTime.toLocaleTimeString('en-MY', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('lastUpdated').textContent = formattedTime;
+        }
+        
+        function exportReport() {
+            alert('Report exported! This would generate a PDF/Excel report in production.');
+            // In production: Generate and download report
+        }
+        
+        function showTopRecyclers() {
+            alert('Showing top recyclers leaderboard...');
+            // In production: Show leaderboard modal
+        }
+        
+        // Initial load
+        loadDashboard();
+    </script>
+</body>
+</html>

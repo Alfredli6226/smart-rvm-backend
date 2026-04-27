@@ -3,7 +3,7 @@ import { RouterLink, useRoute } from 'vue-router';
 import { computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { useNotifications, notificationCount, issueCount } from '../composables/useNotifications';
-import { LayoutDashboard, Wallet, Users, MonitorSmartphone, LogOut, Shield, ClipboardCheck, Trash2, Settings, Globe, AlertCircle, Bell, FileText, Megaphone } from 'lucide-vue-next';
+import { LayoutDashboard, Wallet, Users, MonitorSmartphone, LogOut, Shield, ClipboardCheck, Trash2, Settings, Globe, AlertCircle, Bell, FileText, Megaphone, ShieldCheck } from 'lucide-vue-next';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -108,6 +108,15 @@ const settingsPath = computed(() => {
         >
           {{ notificationCount > 99 ? '99+' : notificationCount }}
         </span>
+      </RouterLink>
+
+      <!-- AI Verification Tab -->
+      <RouterLink to="/ai-verification" 
+        class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+        :class="isActive('/ai-verification') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+      >
+        <ShieldCheck :size="20" />
+        <span>AI Verification</span>
       </RouterLink>
 
       <RouterLink to="/admins" 

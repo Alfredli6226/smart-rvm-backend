@@ -4,26 +4,58 @@ import type { TicketFilters, CustomerServiceMessage, CustomerServiceTicket } fro
 
 const now = () => new Date().toISOString();
 
-const mockTickets: CustomerServiceTicket[] = [
-  {
-    id: 'cs-1', ticket_number: 'CS-0001', subject: 'Quotation request for food waste machine', description: 'Corporate prospect asking for quotation for 8 outlets in KL.',
-    customer_name: 'Jason Lim', customer_phone: '+60123456789', customer_email: 'jason@example.com', company_name: 'ABC Restaurant Group' as any,
-    category: 'Sales', priority: 'High', status: 'Open', lead_score: 'hot', assigned_to: 'Alfred',
-    source: 'WhatsApp', ai_summary: 'Corporate F&B lead asking for urgent quotation.', ai_sentiment: 'positive', ai_tags: ['corporate', 'quotation'],
-    created_at: now(), updated_at: now(), custom_fields: { company_name: 'ABC Restaurant Group' }
-  } as unknown as CustomerServiceTicket,
-  {
-    id: 'cs-2', ticket_number: 'CS-0002', subject: 'Points not credited', description: 'Merchant says customer points are missing after submission.',
-    customer_name: 'Nur Ain', customer_phone: '+60119876543', category: 'Support', priority: 'Medium', status: 'In Progress', lead_score: 'warm', assigned_to: 'Support Team',
-    source: 'Web', ai_summary: 'Likely issue between submission log and rewards sync.', ai_sentiment: 'neutral', ai_tags: ['points', 'rvm'],
-    created_at: now(), updated_at: now(), custom_fields: { company_name: 'Merchant Portal User' }
-  } as unknown as CustomerServiceTicket,
-];
+const normalizeTicket = (row: Record<string, any>): CustomerServiceTicket => {
+  const updatedAt = row.updated_at || row.last_message_at || row.created_at || now();
+  const category = row.category || 'general';
+  const priority = row.priority || 'medium';
+  const status = row.status || 'new';
+  const customerName = row.customer_name || row.company_name || row.customer_phone || 'Unknown Customer';
 
-const mockMessages: Record<string, CustomerServiceMessage[]> = {
-  'cs-1': [{ id: 'msg-1', ticket_id: 'cs-1', message_type: 'message', content: 'Hi, I want a quotation for 8 outlets in KL.', sender_type: 'customer', sender_name: 'Jason Lim', is_internal: false, read_by_agent: true, read_by_customer: true, created_at: now(), updated_at: now() }],
-  'cs-2': [{ id: 'msg-2', ticket_id: 'cs-2', message_type: 'message', content: 'My customer recycled but no points were reflected.', sender_type: 'customer', sender_name: 'Nur Ain', is_internal: false, read_by_agent: true, read_by_customer: true, created_at: now(), updated_at: now() }],
+  return {
+    id: row.id,
+    ticket_number: row.ticket_number || String(row.id).slice(0, 8).toUpperCase(),
+    subject: row.subject || `${category} inquiry`,
+    description: row.description || row.ai_summary || row.next_action || '',
+    customer_name: row.customer_name,
+    customer_email: row.customer_email,
+    customer_phone: row.customer_phone,
+    company_name: row.company_name,
+    category: String(category).replace(/(^|_)(\w)/g, (_, p1, p2) => `${p1 ? ' ' : ''}${p2.toUpperCase()}`),
+    priority: String(priority).charAt(0).toUpperCase() + String(priority).slice(1).toLowerCase() as CustomerServiceTicket['priority'],
+    status: String(status)
+      .replace(/_/g, ' ')
+      .replace(/(^|\s)(\w)/g, (_, p1, p2) => `${p1}${p2.toUpperCase()}`) as CustomerServiceTicket['status'],
+    lead_score: row.lead_score,
+    assigned_to: row.assigned_to,
+    source: row.source || row.channel,
+    channel: row.channel,
+    ai_summary: row.ai_summary,
+    ai_sentiment: row.ai_sentiment,
+    ai_tags: row.ai_tags || [],
+    next_action: row.next_action,
+    last_message_at: row.last_message_at,
+    created_at: row.created_at || now(),
+    updated_at: updatedAt,
+    custom_fields: {
+      company_name: row.company_name,
+      customer_label: customerName,
+    },
+  };
 };
+
+const normalizeMessage = (row: Record<string, any>): CustomerServiceMessage => ({
+  id: row.id,
+  ticket_id: row.ticket_id,
+  message_type: row.is_internal ? 'internal_note' : 'message',
+  content: row.message || row.content || '',
+  sender_type: row.sender_type || 'customer',
+  sender_name: row.sender_name,
+  is_internal: Boolean(row.is_internal),
+  read_by_agent: true,
+  read_by_customer: row.sender_type !== 'agent',
+  created_at: row.created_at || now(),
+  updated_at: row.updated_at || row.created_at || now(),
+});
 
 export function useCustomerService() {
   const tickets = ref<CustomerServiceTicket[]>([]);
@@ -34,7 +66,7 @@ export function useCustomerService() {
 
   const stats = computed(() => ({
     total: tickets.value.length,
-    open: tickets.value.filter(t => t.status === 'Open').length,
+    open: tickets.value.filter(t => ['Open', 'New'].includes(t.status)).length,
     urgent: tickets.value.filter(t => t.priority === 'Critical' || t.lead_score === 'hot').length,
     inProgress: tickets.value.filter(t => t.status === 'In Progress').length,
   }));
@@ -48,7 +80,7 @@ export function useCustomerService() {
     if (filter?.assigned_to) result = result.filter(r => r.assigned_to === filter.assigned_to);
     if (filter?.search) {
       const q = filter.search.toLowerCase();
-      result = result.filter(r => [r.ticket_number, r.subject, r.customer_name, r.customer_phone, r.customer_email, r.ai_summary].filter(Boolean).some(v => String(v).toLowerCase().includes(q)));
+      result = result.filter(r => [r.ticket_number, r.subject, r.customer_name, r.customer_phone, r.customer_email, r.ai_summary, r.company_name].filter(Boolean).some(v => String(v).toLowerCase().includes(q)));
     }
     return result;
   };
@@ -58,63 +90,103 @@ export function useCustomerService() {
     try {
       const { data, error } = await supabase.from('customer_service_tickets').select('*').order('updated_at', { ascending: false });
       if (error) throw error;
-      tickets.value = applyLocalFilter((data as CustomerServiceTicket[]) || [], filter);
+      tickets.value = applyLocalFilter(((data as Record<string, any>[]) || []).map(normalizeTicket), filter);
       usingMock.value = false;
     } catch (e) {
-      console.warn('Using mock customer service data', e);
-      tickets.value = applyLocalFilter(mockTickets, filter);
-      usingMock.value = true;
+      console.warn('Failed to load customer service data', e);
+      tickets.value = [];
+      usingMock.value = false;
     } finally {
       loading.value = false;
     }
   };
 
   const loadTicket = async (id: string) => {
-    try {
-      const { data, error } = await supabase.from('customer_service_tickets').select('*').eq('id', id).single();
-      if (error) throw error;
-      selectedTicket.value = data as CustomerServiceTicket;
-      usingMock.value = false;
-    } catch {
-      selectedTicket.value = mockTickets.find(t => t.id === id) || null;
-      usingMock.value = true;
-    }
+    const { data, error } = await supabase.from('customer_service_tickets').select('*').eq('id', id).single();
+    if (error) throw error;
+    selectedTicket.value = normalizeTicket(data as Record<string, any>);
+    usingMock.value = false;
   };
 
   const loadMessages = async (ticketId: string) => {
-    try {
-      const { data, error } = await supabase.from('customer_service_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-      if (error) throw error;
-      messages.value = (data as CustomerServiceMessage[]) || [];
-      usingMock.value = false;
-    } catch {
-      messages.value = mockMessages[ticketId] || [];
-      usingMock.value = true;
-    }
+    const { data, error } = await supabase.from('customer_service_messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
+    if (error) throw error;
+    messages.value = ((data as Record<string, any>[]) || []).map(normalizeMessage);
+    usingMock.value = false;
+  };
+
+  const findTicketsByPhone = async (phone: string) => {
+    const normalized = phone.replace(/\D/g, '');
+    const { data, error } = await supabase.from('customer_service_tickets').select('*').ilike('customer_phone', `%${normalized}%`).order('updated_at', { ascending: false });
+    if (error) throw error;
+    return ((data as Record<string, any>[]) || []).map(normalizeTicket);
+  };
+
+  const findTicketByNumber = async (ticketNumber: string) => {
+    const { data, error } = await supabase.from('customer_service_tickets').select('*').eq('ticket_number', ticketNumber).maybeSingle();
+    if (error) throw error;
+    return data ? normalizeTicket(data as Record<string, any>) : null;
+  };
+
+  const loadOpenTickets = async () => {
+    return loadTickets({ status: 'Open' });
   };
 
   const updateTicket = async (id: string, patch: Partial<CustomerServiceTicket>) => {
-    try {
-      const { error } = await supabase.from('customer_service_tickets').update({ ...patch, updated_at: now() }).eq('id', id);
-      if (error) throw error;
-    } catch {
-      const idx = mockTickets.findIndex(t => t.id === id);
-      if (idx >= 0) mockTickets[idx] = { ...mockTickets[idx], ...patch, updated_at: now() } as CustomerServiceTicket;
-    }
+    const payload = Object.fromEntries(
+      Object.entries({
+        customer_name: patch.customer_name,
+        customer_email: patch.customer_email,
+        customer_phone: patch.customer_phone,
+        company_name: patch.company_name,
+        category: patch.category?.toLowerCase(),
+        priority: patch.priority?.toLowerCase(),
+        status: patch.status?.toLowerCase().replace(/\s+/g, '_'),
+        assigned_to: patch.assigned_to,
+        ai_summary: patch.ai_summary,
+        ai_sentiment: patch.ai_sentiment?.toLowerCase(),
+        ai_tags: patch.ai_tags,
+        lead_score: patch.lead_score,
+        next_action: patch.next_action,
+        last_message_at: patch.last_message_at,
+        updated_at: now(),
+      }).filter(([, value]) => value !== undefined)
+    );
+
+    const { error } = await supabase.from('customer_service_tickets').update(payload).eq('id', id);
+    if (error) throw error;
     await loadTickets();
     if (selectedTicket.value?.id === id) await loadTicket(id);
   };
 
   const addMessage = async (ticketId: string, message: Omit<CustomerServiceMessage, 'id' | 'ticket_id' | 'created_at' | 'updated_at'>) => {
-    const payload = { ...message, ticket_id: ticketId, created_at: now(), updated_at: now() };
-    try {
-      const { error } = await supabase.from('customer_service_messages').insert(payload);
-      if (error) throw error;
-    } catch {
-      mockMessages[ticketId] = [...(mockMessages[ticketId] || []), { ...payload, id: `mock-${Date.now()}` } as CustomerServiceMessage];
+    const createdAt = now();
+    const payload = {
+      ticket_id: ticketId,
+      sender_type: message.sender_type,
+      sender_name: message.sender_name,
+      message: message.content,
+      content: message.content,
+      is_internal: message.is_internal,
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+    const { error } = await supabase.from('customer_service_messages').insert(payload);
+    if (error) throw error;
+
+    const ticketPatch: Record<string, any> = {
+      last_message_at: createdAt,
+      updated_at: createdAt,
+    };
+
+    if (!message.is_internal) {
+      ticketPatch.status = 'in_progress';
     }
+
+    await supabase.from('customer_service_tickets').update(ticketPatch).eq('id', ticketId);
     await loadMessages(ticketId);
+    if (selectedTicket.value?.id === ticketId) await loadTicket(ticketId);
   };
 
-  return { tickets, messages, selectedTicket, loading, usingMock, stats, loadTickets, loadTicket, loadMessages, updateTicket, addMessage };
+  return { tickets, messages, selectedTicket, loading, usingMock, stats, loadTickets, loadTicket, loadMessages, findTicketsByPhone, findTicketByNumber, loadOpenTickets, updateTicket, addMessage };
 }

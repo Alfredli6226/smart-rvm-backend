@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "api/health.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/users.ts",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/data-sync.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/api/users",
+      "dest": "/api/users.ts"
+    },
+    {
+      "src": "/api/data-sync",
+      "dest": "/api/data-sync.js"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "MERCHANT_NO": "20250902924787",
+    "SECRET": "99368df20fd10d5322f203435ddc9984",
+    "USE_MOCK_DATA": "true"
+  },
+  "regions": ["sin1"],
+  "github": {
+    "silent": true
+  }
+}

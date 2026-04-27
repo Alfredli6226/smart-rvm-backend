@@ -1,0 +1,61 @@
+{
+  "environmentVariables": {
+    "VITE_SUPABASE_URL": {
+      "description": "Supabase项目URL (创建项目后获取)",
+      "value": "https://[project-ref].supabase.co",
+      "required": true
+    },
+    "SUPABASE_SERVICE_ROLE_KEY": {
+      "description": "Supabase Service Role Key (Settings > API)",
+      "value": "eyJ... [你的service_role_key]",
+      "required": true
+    },
+    "MERCHANT_NO": {
+      "description": "Vendor API商户号",
+      "value": "20250902924787",
+      "required": true
+    },
+    "SECRET": {
+      "description": "Vendor API密钥",
+      "value": "99368df20fd10d5322f203435ddc9984",
+      "required": true
+    },
+    "NODE_ENV": {
+      "description": "运行环境",
+      "value": "production",
+      "required": true
+    }
+  },
+  "optionalVariables": {
+    "GOOGLE_VISION_API_KEY": {
+      "description": "Google Vision API密钥 (AI图片分析)",
+      "value": "",
+      "required": false
+    },
+    "CLARIFAI_API_KEY": {
+      "description": "Clarifai API密钥 (AI图片分析)",
+      "value": "",
+      "required": false
+    },
+    "WHATSAPP_BUSINESS_API_KEY": {
+      "description": "WhatsApp Business API密钥",
+      "value": "",
+      "required": false
+    },
+    "TWILIO_ACCOUNT_SID": {
+      "description": "Twilio账户SID (SMS通知)",
+      "value": "",
+      "required": false
+    },
+    "TWILIO_AUTH_TOKEN": {
+      "description": "Twilio认证令牌",
+      "value": "",
+      "required": false
+    }
+  },
+  "deploymentNotes": {
+    "supabaseSetup": "1. 创建Supabase项目: rvm-merchant-platform\n2. 地区: Singapore\n3. 运行supabase_init.sql脚本\n4. 获取URL和Service Role Key",
+    "vercelDeployment": "1. 访问 https://vercel.com/new\n2. 导入GitHub仓库\n3. 配置环境变量\n4. 点击Deploy",
+    "postDeployment": "1. 访问: https://[your-domain].vercel.app/api/data-sync?action=full-sync\n2. 测试: https://[your-domain].vercel.app/api/health\n3. 登录管理界面"
+  }
+}

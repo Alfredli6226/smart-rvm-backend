@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart RVM - Dashboard Hub</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #f7fafc;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .header .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+        
+        .badge {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            padding: 8px 20px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            display: inline-block;
+            margin-top: 15px;
+        }
+        
+        .dashboards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .dashboard-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        
+        .dashboard-card:hover {
+            transform: translateY(-8px);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: #667eea;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .dashboard-card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .dashboard-card p {
+            color: #a0aec0;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        
+        .features {
+            list-style: none;
+            margin-top: 20px;
+        }
+        
+        .features li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .features li:before {
+            content: "✓";
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        .access-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 20px;
+            transition: transform 0.2s ease;
+        }
+        
+        .access-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: #a0aec0;
+            font-size: 0.9rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 40px;
+        }
+        
+        .status-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .status-live {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+        
+        .status-demo {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboards-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Smart RVM Dashboard Hub</h1>
+            <div class="subtitle">AI-Powered Recycling Management Platform</div>
+            <div class="badge">ALL IN ONE PLATFORM • REAL-TIME DATA</div>
+        </div>
+        
+        <div class="dashboards-grid">
+            <a href="ai-verification-dashboard-complete.html" class="dashboard-card">
+                <span class="status-badge status-live">LIVE</span>
+                <h2>🤖 AI Verification Dashboard</h2>
+                <p>Real-time fraud detection & user trust scoring system. Monitor verification rates, fraud patterns, and user trust levels.</p>
+                <ul class="features">
+                    <li>Fraud detection with AI</li>
+                    <li>User trust scoring (Platinum/Gold/Silver)</li>
+                    <li>Real-time monitoring</li>
+                    <li>Manual review workflow</li>
+                </ul>
+                <div class="access-btn">Access AI Dashboard →</div>
+            </a>
+            
+            <a href="simple-devices.html" class="dashboard-card">
+                <span class="status-badge status-live">LIVE</span>
+                <h2>⚙️ Real Device Dashboard</h2>
+                <p>Monitor all 10 Smart RVM machines in real-time. View UCO levels, machine status, and capacity management.</p>
+                <ul class="features">
+                    <li>Live machine data from vendor API</li>
+                    <li>Machine capacity management (500-1000kg)</li>
+                    <li>Smart alert thresholds (70%/85%/95%)</li>
+                    <li>Location-based monitoring</li>
+                </ul>
+                <div class="access-btn">Access Device Dashboard →</div>
+            </a>
+            
+            <a href="user_analytics.html" class="dashboard-card">
+                <span class="status-badge status-live">LIVE</span>
+                <h2>📊 User Analytics Dashboard</h2>
+                <p>Comprehensive user analytics and recycling insights. Track user engagement, points distribution, and recycling patterns.</p>
+                <ul class="features">
+                    <li>User recycling statistics</li>
+                    <li>Points distribution analysis</li>
+                    <li>Engagement tracking</li>
+                    <li>Growth metrics</li>
+                </ul>
+                <div class="access-btn">Access Analytics →</div>
+            </a>
+            
+            <a href="simple-dashboard.html" class="dashboard-card">
+                <span class="status-badge status-demo">DEMO</span>
+                <h2>📈 Simple Dashboard</h2>
+                <p>Quick overview dashboard with key metrics. Perfect for daily check-ins and executive summaries.</p>
+                <ul class="features">
+                    <li>Key performance indicators</li>
+                    <li>Quick status overview</li>
+                    <li>Executive summary view</li>
+                    <li>Mobile-friendly design</li>
+                </ul>
+                <div class="access-btn">Access Simple Dashboard →</div>
+            </a>
+        </div>
+        
+        <div class="dashboard-card" style="grid-column: 1 / -1;">
+            <h2>🚀 Platform Features</h2>
+            <p>The Smart RVM platform is now fully unified with AI-powered features:</p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px;">
+                <div>
+                    <h3 style="color: #667eea; margin-bottom: 10px;">🤖 AI-Powered</h3>
+                    <ul class="features">
+                        <li>Image verification with fraud detection</li>
+                        <li>User trust scoring system</li>
+                        <li>Pattern recognition for fake submissions</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 style="color: #10b981; margin-bottom: 10px;">⚙️ Smart Operations</h3>
+                    <ul class="features">
+                        <li>Machine capacity management</li>
+                        <li>Real-time vendor API integration</li>
+                        <li>Dynamic alert thresholds</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 style="color: #f59e0b; margin-bottom: 10px;">📊 Business Intelligence</h3>
+                    <ul class="features">
+                        <li>Multiple dashboard views</li>
+                        <li>Analytics and reporting</li>
+                        <li>Real-time data visualization</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div>Smart RVM Platform • HMA Digital Sdn Bhd</div>
+            <div>Deployed: 2026-04-16 • Status: <span style="color: #10b981;">Operational</span></div>
+            <div>Vendor API: Connected • AI System: Active • Machine Count: 10</div>
+            <div style="margin-top: 15px;">
+                <a href="/" style="color: #a0aec0; text-decoration: none; margin: 0 10px;">Main Platform</a> • 
+                <a href="/api/health" style="color: #a0aec0; text-decoration: none; margin: 0 10px;">API Health</a> • 
+                <a href="https://mygreenplus.com" style="color: #a0aec0; text-decoration: none; margin: 0 10px;">MyGreenPlus</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update status indicators
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if dashboards are accessible
+            const dashboards = [
+                'ai-verification-dashboard-complete.html',
+                'simple-devices.html',
+                'user_analytics.html',
+                'simple-dashboard.html'
+            ];
+            
+            dashboards.forEach(dashboard => {
+                fetch(dashboard)
+                    .then(response => {
+                        const badge = document.querySelector(`a[href="${dashboard}"] .status-badge`);
+                        if (response.ok && badge) {
+                            badge.textContent = 'LIVE';
+                            badge.className = 'status-badge status-live';
+                        }
+                    })
+                    .catch(() => {
+                        // Keep default status
+                    });
+            });
+        });
+    </script>
+</body>
+</html>
