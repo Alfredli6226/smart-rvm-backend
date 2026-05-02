@@ -248,25 +248,23 @@ async function getActiveRecyclers(req, res) {
     for (const m of machines) machineLookup[m.deviceNo || m.device_no] = m.address || m.name || m.device_no;
 
     let recyclers = [];
-    for (const u of users) {
-      const weight = parseFloat(u.total_weight) || 0;
-      const deviceNo = u.deviceNo || u.device_no || '';
-      const lastActive = u.createTime || u.last_active_at || u.updateTime;
+    for (const [uid, ug] of Object.entries(userGroups)) {
+      const weight = ug.totalWeight / 3; // Month estimate ≈ 1/3 of total
+      const lastActive = ug.lastSeen || now.toISOString();
       const isRecentlyActive = lastActive ? new Date(lastActive) >= THIRTY_DAYS_AGO : false;
-      const monthWeight = Math.min(weight, Math.max(0, weight * 0.3));
       const secAgo = lastActive ? Math.floor((now.getTime() - new Date(lastActive).getTime()) / 1000) : 999999;
       recyclers.push({
-        userId: u.user_id || u.id || u.phone || `UID-${Math.random().toString(36).slice(2, 8)}`,
-        userName: u.nickName || u.nickname || u.name || 'User',
-        email: u.email || '', phone: u.phone || '',
-        machineLocation: machineLookup[deviceNo] || deviceNo || 'Unknown',
-        totalRecycled: parseFloat(monthWeight.toFixed(1)),
+        userId: uid,
+        userName: `User ${uid.slice(-6)}`,
+        email: '', phone: '',
+        machineLocation: ug.records[0]?.deviceProductName || 'Unknown',
+        totalRecycled: parseFloat(weight.toFixed(1)),
         monthlyGoal: MONTHLY_GOAL_KG,
-        progress: Math.min(100, Math.round((monthWeight / MONTHLY_GOAL_KG) * 100)),
-        carbonSaved: parseFloat((monthWeight * CO2_PER_KG).toFixed(1)),
-        lastSubmission: lastActive || now.toISOString(),
+        progress: Math.min(100, Math.round((weight / MONTHLY_GOAL_KG) * 100)),
+        carbonSaved: parseFloat((weight * CO2_PER_KG).toFixed(1)),
+        lastSubmission: lastActive,
         status: secAgo < 300 ? 'active_now' : isRecentlyActive ? 'recently_active' : 'inactive',
-        deviceNo
+        deviceNo: ug.records[0]?.deviceNo || ''
       });
     }
 
