@@ -28,35 +28,12 @@ export function useDashboardStats() {
   }
 
   async function fetchStats() {
-    // Load live vendor data FIRST (always works, no auth needed)
-    try {
-      const [r, c] = await Promise.all([
-        fetch('/api/reports?action=overview'),
-        fetch('/api/user-analytics?endpoint=cert-overview').catch(() => null)
-      ]);
-      if (r.ok) {
-        const d = await r.json();
-        if (d.liveFromVendor && parseFloat(d.totalWeight) > 0) {
-          totalWeight.value = parseFloat(d.totalWeight);
-          totalPoints.value = parseFloat(d.totalPoints) || 0;
-        }
-      }
-      if (c && c.ok) {
-        const cd = await c.json();
-        if (cd.success && cd.data) {
-          const cdata = cd.data;
-          // Store CO2/trees/submissions for display
-          (window as any).__rvm_live_co2 = cdata.carbonSaved || 0;
-          (window as any).__rvm_live_trees = cdata.treesEquivalent || 0;
-          (window as any).__rvm_live_submissions = cdata.totalSubmissions || 0;
-        }
-      }
-    } catch(e) { /* live API fallback */ }
-
     const auth = useAuthStore();
+
     loading.value = true;
 
     try {
+      // Always try to load public stats (even without auth)
       const merchantId = auth.merchantId || null;
 
       if (merchantId) {
