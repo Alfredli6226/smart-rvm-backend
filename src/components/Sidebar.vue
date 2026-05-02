@@ -3,7 +3,7 @@ import { RouterLink, useRoute } from 'vue-router';
 import { computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { useNotifications, notificationCount, issueCount } from '../composables/useNotifications';
-import { LayoutDashboard, Wallet, Users, MonitorSmartphone, LogOut, Shield, ClipboardCheck, Trash2, Settings, Globe, AlertCircle, Bell, FileText, Megaphone, ShieldCheck, MessageCircle, Percent, Truck, X, Trophy, ShoppingBag } from 'lucide-vue-next';
+import { LayoutDashboard, Wallet, Users, MonitorSmartphone, LogOut, Shield, ClipboardCheck, Trash2, Settings, Globe, AlertCircle, Bell, FileText, Megaphone, ShieldCheck, MessageCircle, Percent, Truck, X, Trophy, ShoppingBag, BarChart3, Activity } from 'lucide-vue-next';
 
 defineProps<{ mobileOpen?: boolean }>();
 const emit = defineEmits(['close']);
@@ -113,6 +113,15 @@ const settingsPath = computed(() => {
       >
         <FileText :size="20" />
         Reports
+      </RouterLink>
+
+      <!-- Analytics + CO2/Tree -->
+      <RouterLink to="/active-recyclers" 
+        class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+        :class="isActive('/active-recyclers') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+      >
+        <BarChart3 :size="20" />
+        Analytics
       </RouterLink>
 
       <RouterLink to="/bulk-collection" 

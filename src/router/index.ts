@@ -50,7 +50,7 @@ const router = createRouter({
       path: '/live-command-center',
       name: 'LiveCommandCenter',
       component: () => import('../views/LiveCommandCenter.vue'),
-      meta: { hideSidebar: true, requiresAuth: true, title: 'Live Command Center' }
+      meta: { requiresAuth: true, title: 'Live Big Data Centre' }
     },
     {
       path: '/big-data',
@@ -231,7 +231,7 @@ const router = createRouter({
           alias: '/live-recycler-monitor',
           name: 'ActiveRecyclers',
           component: () => import('../views/ActiveRecyclers.vue'),
-          meta: { title: 'Active Recyclers' }
+          meta: { title: 'Analytics' }
         },
         {
           path: 'orders',
