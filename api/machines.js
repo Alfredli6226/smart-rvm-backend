@@ -70,7 +70,7 @@ export default async function handler(req, res) {
       }));
 
       // Online status from device list
-      const online = d.isOnline === 1 || d.isOnline === true || d.status === 1;
+      const online = d.isOnline === 1 || d.isOnline === true;
       const lastOnline = d.lastOnlineTime || d.updateTime || '';
 
       // Machine type identifier
