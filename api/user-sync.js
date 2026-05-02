@@ -42,18 +42,41 @@ export default async function handler(req, res) {
       if ((r.recordedTime || r.createTime || '') > userGroups[uid].lastSeen) userGroups[uid].lastSeen = r.recordedTime || r.createTime || '';
     }
 
-    const enriched = Object.values(userGroups).map(u => {
+    const enrichedMap = {};
+    
+    // Add users from integral records (with vendor weights)
+    for (const u of Object.values(userGroups)) {
       const name = nameMap[u.userId] || phoneMap[u.userId] || ('User ' + u.userId.slice(-6));
-      return {
-        userId: u.userId,
-        name: name,
+      enrichedMap[u.userId] = {
+        userId: u.userId, name: name,
         totalWeight: +u.totalWeight.toFixed(1),
         totalPoints: +u.totalPoints.toFixed(1),
         submissions: u.submissions,
-        lastSeen: u.lastSeen
+        lastSeen: u.lastSeen,
+        source: 'vendor'
       };
-    });
-
+    }
+    
+    // Add users from Supabase (who have weight but no integral records)
+    if (Array.isArray(userRes)) {
+      for (const u of userRes) {
+        const uid = String(u.user_id);
+        const wt = parseFloat(u.total_weight || 0);
+        if (wt > 0 && !enrichedMap[uid]) {
+          enrichedMap[uid] = {
+            userId: uid,
+            name: u.nickname || u.phone || 'User',
+            totalWeight: wt,
+            totalPoints: 0,
+            submissions: 0,
+            lastSeen: '',
+            source: 'supabase'
+          };
+        }
+      }
+    }
+    
+    const enriched = Object.values(enrichedMap);
     enriched.sort((a, b) => b.totalWeight - a.totalWeight);
 
     return res.status(200).json({
