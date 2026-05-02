@@ -28,12 +28,24 @@ export function useDashboardStats() {
   }
 
   async function fetchStats() {
-    const auth = useAuthStore();
+    // Load live vendor data immediately (works even without auth)
+    try {
+      const r = await fetch('/api/reports?action=overview');
+      if (r.ok) {
+        const d = await r.json();
+        if (d.liveFromVendor && parseFloat(d.totalWeight) > 0) {
+          totalWeight.value = parseFloat(d.totalWeight);
+          totalPoints.value = parseFloat(d.totalPoints) || 0;
+          pendingCount.value = Number(d.recentSubmissions) || 0;
+        }
+      }
+    } catch(e) { /* fallback to Supabase */ }
 
+    const auth = useAuthStore();
     loading.value = true;
 
     try {
-      // Always try to load public stats (even without auth)
+      const merchantId = auth.merchantId || null;
       const merchantId = auth.merchantId || null;
 
       if (merchantId) {
