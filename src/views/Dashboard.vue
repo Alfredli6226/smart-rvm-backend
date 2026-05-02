@@ -988,6 +988,7 @@ onMounted(async () => {
   // Initial fetch
   machineStore.fetchMachines();
   fetchStats();
+  fetchFilteredImpact(); // Load env impact for default filter
 
   // Watch for auth to finish loading, then refetch
   watch(() => auth.loading, async (isLoading) => {
