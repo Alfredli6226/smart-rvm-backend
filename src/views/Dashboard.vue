@@ -76,6 +76,9 @@ async function fetchCertificatesData() {
     console.warn('Certificates API not available, using computed defaults');
   } finally {
     certificatesLoading.value = false;
+    liveCO2.value = d.carbonSaved || 0;
+    liveTrees.value = d.treesEquivalent || 0;
+    liveSubmissions.value = d.totalSubmissions || 0;
   }
 }
 
@@ -915,7 +918,7 @@ onMounted(async () => {
 
     <div v-else>
       <!-- AGENT Stats Cards -->
-      <div v-if="isAgent" class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8">
+      <div v-if="isAgent" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-6 mb-8">
         <StatsCard title="Active Alerts" :value="activeAlertsCount" color="amber" description="Requires Immediate Action">
           <template #icon><AlertTriangle :size="24" /></template>
         </StatsCard>
@@ -931,7 +934,7 @@ onMounted(async () => {
       </div>
 
       <!-- Non-AGENT and Non-COLLECTOR Stats Cards (Admin/Merchant view) -->
-      <div v-else-if="!isAgent && !isCollector" class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8">
+      <div v-else-if="!isAgent && !isCollector" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-6 mb-8">
         <StatsCard title="Pending Withdrawals" :value="pendingCount" color="amber" description="Action Required">
           <template #icon><AlertCircle :size="24" /></template>
         </StatsCard>
@@ -943,6 +946,15 @@ onMounted(async () => {
         </StatsCard>
         <StatsCard title="Recycled Weight" :value="`${formatNumber(totalWeight)} kg`" color="purple" description="Total Recycled Material">
           <template #icon><Scale :size="24" /></template>
+        </StatsCard>
+        <StatsCard title="CO2 Saved" :value="`${formatNumber(liveCO2)} kg`" color="emerald" description="Environmental Impact">
+          <template #icon><Leaf :size="24" /></template>
+        </StatsCard>
+        <StatsCard title="Trees Equivalent" :value="formatNumber(liveTrees)" color="green" description="Environmental Impact">
+          <template #icon><Award :size="24" /></template>
+        </StatsCard>
+        <StatsCard title="Total Submissions" :value="formatNumber(liveSubmissions)" color="blue" description="All-time Recycling Events">
+          <template #icon><Activity :size="24" /></template>
         </StatsCard>
       </div>
 
