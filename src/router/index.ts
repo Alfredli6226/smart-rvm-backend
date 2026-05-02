@@ -48,6 +48,7 @@ const router = createRouter({
     },
     {
       path: '/live-ops',
+      alias: '/live-command-center',
       name: 'LiveCommandCenter',
       component: () => import('../views/LiveCommandCenter.vue'),
       meta: { requiresAuth: true, title: 'Live Ops' }
