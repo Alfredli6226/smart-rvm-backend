@@ -351,48 +351,54 @@ function progressColor(pct: number): string {
     </div>
 
     <!-- 🌿 Environmental Impact Section -->
-    <div class="bg-emerald-800 rounded-2xl shadow-lg p-4 sm:p-6 text-white">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center">
-          <Leaf :size="22" class="text-white" />
+    <div class="bg-gradient-to-br from-emerald-700 via-emerald-800 to-green-900 rounded-2xl shadow-lg p-5 sm:p-7 text-white">
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-5">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+            <Leaf :size="22" class="text-white" />
+          </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-bold">Environmental Impact</h3>
+            <p class="text-emerald-200 text-xs">Live from vendor data</p>
+          </div>
         </div>
-        <div>
-          <h3 class="text-lg font-bold">Environmental Impact</h3>
-          <p class="text-emerald-200 text-xs">Real-time sustainability metrics</p>
-        </div>
+        <span class="text-[10px] px-2 py-1 bg-white/10 rounded-full text-emerald-200">Updated real-time</span>
       </div>
-      
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
-        <div class="text-center px-3 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
-          <p class="text-2xl sm:text-3xl font-extrabold">{{ liveCO2.toLocaleString() || '-' }}</p>
-          <p class="text-[10px] text-emerald-200 uppercase tracking-wider font-medium">CO₂ Saved (kg)</p>
+
+      <!-- Main Big Numbers Row -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+        <div class="bg-white/10 backdrop-blur rounded-xl p-4 text-center border border-white/10">
+          <p class="text-2xl sm:text-3xl font-black tracking-tight">{{ liveCO2 ? liveCO2.toLocaleString() : '-' }}</p>
+          <p class="text-[11px] text-emerald-200 uppercase tracking-wider mt-1">CO₂ Saved (kg)</p>
         </div>
-        <div class="text-center px-3 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
-          <p class="text-2xl sm:text-3xl font-extrabold">{{ liveTrees || '-' }}</p>
-          <p class="text-[10px] text-emerald-200 uppercase tracking-wider font-medium">🌳 Trees Equivalent</p>
+        <div class="bg-white/10 backdrop-blur rounded-xl p-4 text-center border border-white/10">
+          <p class="text-2xl sm:text-3xl font-black tracking-tight">{{ liveTrees || '-' }}</p>
+          <p class="text-[11px] text-emerald-200 uppercase tracking-wider mt-1">🌳 Trees Equivalent</p>
         </div>
-        <div class="text-center px-3 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
-          <p class="text-2xl sm:text-3xl font-extrabold">{{ liveRecycledWeight ? liveRecycledWeight.toLocaleString() : '-' }}</p>
-          <p class="text-[10px] text-emerald-200 uppercase tracking-wider font-medium">♻️ Recycled (kg)</p>
+        <div class="bg-white/10 backdrop-blur rounded-xl p-4 text-center border border-white/10">
+          <p class="text-2xl sm:text-3xl font-black tracking-tight">{{ liveRecycledWeight ? liveRecycledWeight.toLocaleString() : '-' }}</p>
+          <p class="text-[11px] text-emerald-200 uppercase tracking-wider mt-1">Total Recycled (kg)</p>
         </div>
       </div>
 
+      <!-- Secondary Metrics Row -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div class="bg-white/10 rounded-lg p-3 text-center">
-          <p class="text-lg font-bold">{{ liveSubmissions || '-' }}</p>
-          <p class="text-[10px] text-emerald-200">Submissions</p>
+        <div class="bg-white/5 rounded-lg p-3 text-center">
+          <p class="text-base sm:text-lg font-bold">{{ liveSubmissions ? liveSubmissions.toLocaleString() : '-' }}</p>
+          <p class="text-[10px] text-emerald-300">Submissions</p>
         </div>
-        <div class="bg-white/10 rounded-lg p-3 text-center">
-          <p class="text-lg font-bold">{{ liveActiveUsers || '-' }}</p>
-          <p class="text-[10px] text-emerald-200">Active Users</p>
+        <div class="bg-white/5 rounded-lg p-3 text-center">
+          <p class="text-base sm:text-lg font-bold">{{ liveActiveUsers || '-' }}</p>
+          <p class="text-[10px] text-emerald-300">Active Users</p>
         </div>
-        <div class="bg-white/10 rounded-lg p-3 text-center">
-          <p class="text-lg font-bold">{{ liveOnlineMachines || '-' }}</p>
-          <p class="text-[10px] text-emerald-200">Online Machines</p>
+        <div class="bg-white/5 rounded-lg p-3 text-center">
+          <p class="text-base sm:text-lg font-bold">{{ liveOnlineMachines || '-' }}</p>
+          <p class="text-[10px] text-emerald-300">Online Machines</p>
         </div>
-        <div class="bg-white/10 rounded-lg p-3 text-center">
-          <p class="text-lg font-bold">{{ liveTodayWeight ? liveTodayWeight.toFixed(1) : '-' }}</p>
-          <p class="text-[10px] text-emerald-200">Today (kg)</p>
+        <div class="bg-white/5 rounded-lg p-3 text-center">
+          <p class="text-base sm:text-lg font-bold">{{ liveTodayWeight ? liveTodayWeight.toFixed(1) : '-' }}</p>
+          <p class="text-[10px] text-emerald-300">Today (kg)</p>
         </div>
       </div>
     </div>
