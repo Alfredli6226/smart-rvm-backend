@@ -49,7 +49,7 @@ async function vGet(path, params = {}) {
 // Fetch ALL integral records from vendor API (paginated, in parallel)
 export async function fetchAllIntegralRecords(maxPages = 70) {
   // First, get total count
-  const first = await vGet('/system/integral/list', { page: 1, pageSize: 50, userType: 11 });
+  const first = await vGet('/system/integral/list', { page: 1, pageSize: 50 });
   if (!first.ok || !first.data) return [];
   
   const total = parseInt(first.data.total || '0');
@@ -63,7 +63,7 @@ export async function fetchAllIntegralRecords(maxPages = 70) {
   const pagePromises = [];
   for (let p = 2; p <= pagesToFetch; p++) {
     pagePromises.push(
-      vGet('/system/integral/list', { page: p, pageSize: 50, userType: 11 })
+      vGet('/system/integral/list', { page: p, pageSize: 50 })
         .then(r => r.ok && r.data ? (r.data.rows || []) : [])
         .catch(() => [])
     );
@@ -78,7 +78,7 @@ export async function fetchRecentIntegralRecords(pages = 3) {
   const promises = [];
   for (let p = 1; p <= pages; p++) {
     promises.push(
-      vGet('/system/integral/list', { page: p, pageSize: 50, userType: 11 })
+      vGet('/system/integral/list', { page: p, pageSize: 50 })
         .then(r => r.ok && r.data ? (r.data.rows || []) : [])
         .catch(() => [])
     );
