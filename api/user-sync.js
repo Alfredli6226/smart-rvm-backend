@@ -44,11 +44,20 @@ export default async function handler(req, res) {
 
     const enrichedMap = {};
     
+    // Build reverse lookup: userId -> phone from Supabase
+    const userIdToPhone = {};
+    if (Array.isArray(userRes)) {
+      for (const u of userRes) {
+        if (u.phone && u.user_id) userIdToPhone[String(u.user_id)] = u.phone;
+      }
+    }
+    
     // Add users from integral records (with vendor weights)
     for (const u of Object.values(userGroups)) {
       const name = nameMap[u.userId] || phoneMap[u.userId] || ('User ' + u.userId.slice(-6));
+      const phone = userIdToPhone[u.userId] || '';
       enrichedMap[u.userId] = {
-        userId: u.userId, name: name,
+        userId: u.userId, name: name, phone: phone,
         totalWeight: +u.totalWeight.toFixed(1),
         totalPoints: +u.totalPoints.toFixed(1),
         submissions: u.submissions,
@@ -65,6 +74,7 @@ export default async function handler(req, res) {
           enrichedMap[uid] = {
             userId: uid,
             name: u.nickname || u.phone || 'User',
+            phone: u.phone || '',
             totalWeight: 0,
             totalPoints: 0,
             submissions: 0,

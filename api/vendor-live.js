@@ -101,17 +101,15 @@ export function score(integralNum) {
 }
 
 // Classify waste type based on device and context
+// UCO machines (device numbers from vendor API)
+const UCO_DEVICES = ['071582000006','071582000007','071582000008','071582000009','071582000010'];
+
 export function classifyWasteType(record) {
-  // Try to classify based on device product name
+  const deviceNo = record.deviceNo || record.device_no || '';
+  if (UCO_DEVICES.includes(deviceNo)) return 'UCO';
   const name = (record.deviceProductName || '').toLowerCase();
   if (name.includes('油') || name.includes('uco') || name.includes('oil') || name.includes('cooking')) return 'UCO';
-  if (name.includes('瓶') || name.includes('plastic') || name.includes('pet') || name.includes('bottle')) return 'Plastic';
-  if (name.includes('铝') || name.includes('aluminium') || name.includes('can') || name.includes('aluminum')) return 'Aluminum';
-  if (name.includes('纸') || name.includes('paper') || name.includes('cardboard')) return 'Paper';
-  if (name.includes('glass') || name.includes('玻璃')) return 'Glass';
-  // Default: check if device type suggests mixed recycling
   if (name.includes('food') || name.includes('厨房') || name.includes('foodwaste') || name.includes('organic') || name.includes('compost')) return 'Food Waste';
-  if (name.includes('回收') || name.includes('回收柜') || name.includes('rvm') || name.includes('recycle')) return 'Recyclables';
   return 'Mixed';
 }
 
