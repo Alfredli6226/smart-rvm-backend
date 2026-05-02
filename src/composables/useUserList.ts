@@ -100,6 +100,33 @@ export function useUserList() {
 
   const fetchUsers = async () => {
     // Use live vendor API ONLY (no Supabase proxy dependency)
+        // Try live vendor API first for real user data
+    try {
+      const r = await fetch('/api/user-analytics?endpoint=active-recyclers&limit=1000');
+      if (r.ok) {
+        const d = await r.json();
+        if (d.success && Array.isArray(d.data) && d.data.length > 0) {
+          users.value = d.data.map((u: any, i: number) => ({
+            id: u.userId || i,
+            user_id: u.userId || '',
+            nickname: u.userName || 'User',
+            phone: u.phone || '',
+            email: u.email || '',
+            total_weight: u.totalRecycled || 0,
+            total_points: u.carbonSaved || 0,
+            balance: 0, earnings: 0,
+            last_active_at: u.lastSubmission || '',
+            status: u.status || '',
+            device_no: u.deviceNo || '',
+            machine_location: u.machineLocation || '',
+            _source: 'vendor'
+          }));
+          loading.value = false;
+          return;
+        }
+      }
+    } catch(e) { /* fallback to Supabase */ }
+    
     loading.value = true;
     try {
       const r = await fetch('/api/user-analytics?endpoint=active-recyclers&limit=1000');
