@@ -6,8 +6,8 @@ import { useDashboardStats } from '../composables/useDashboardStats';
 import {
   Users, Search, Download, Send, ChevronRight,
   Activity, Clock, MapPin, Phone, Mail,
-  Scale, Leaf, Target, ChevronLeft,
-  RefreshCw, AlertCircle, X, Filter, Loader, Leaf,
+  Scale, Target, ChevronLeft,
+  RefreshCw, AlertCircle, X, Filter, Loader,
   Wifi, WifiOff, Eye, ChevronDown, FileSpreadsheet
 } from 'lucide-vue-next';
 import { useESGExport } from '../composables/useESGExport';
