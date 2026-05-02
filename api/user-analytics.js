@@ -283,31 +283,7 @@ async function getActiveRecyclers(req, res) {
     const total = recyclers.length;
     const paginated = recyclers.slice(offset, offset + limit);
 
-    if (paginated.length < 5) {
-      const samples = [
-        { name: 'Sindylee', phone: '0166927737', loc: 'Meranti Apartment, Subang Jaya', dev: '071582000001' },
-        { name: 'EcoWarrior', phone: '0123456789', loc: 'Taman Wawasan, Puchong', dev: '071582000002' },
-        { name: 'GreenHero', phone: '0112345678', loc: 'Idaman Bukit Jelutong, Shah Alam', dev: '071582000003' },
-        { name: 'RecycleKing', phone: '0198765432', loc: 'KL City Centre', dev: '071582000004' },
-        { name: 'EarthSaver', phone: '0171112223', loc: 'Ampang Point', dev: '071582000005' },
-        { name: 'PlasticFree', phone: '0135556667', loc: 'Cheras Leisure Mall', dev: '071582000006' },
-        { name: 'GreenMachine', phone: '0187778889', loc: 'Putrajaya Presint 9', dev: '071582000007' },
-      ];
-      for (let i = paginated.length; i < Math.min(limit, 10); i++) {
-        const s = samples[i % samples.length];
-        const secAgo = i < 2 ? Math.floor(Math.random() * 240) : Math.floor(Math.random() * 20 * 86400) + 3600;
-        const wt = parseFloat((Math.random() * 80 + 5).toFixed(1));
-        paginated.push({
-          userId: `sample-${i + 1000}`, userName: s.name,
-          email: `${s.name.toLowerCase()}@email.com`, phone: s.phone,
-          machineLocation: s.loc, totalRecycled: wt, monthlyGoal: MONTHLY_GOAL_KG,
-          progress: Math.min(100, Math.round((wt / MONTHLY_GOAL_KG) * 100)),
-          carbonSaved: parseFloat((wt * CO2_PER_KG).toFixed(1)),
-          lastSubmission: new Date(now.getTime() - secAgo * 1000).toISOString(),
-          status: i < 2 ? 'active_now' : 'recently_active', deviceNo: s.dev
-        });
-      }
-    }
+    // No fallback data - only show real recyclers from vendor API
 
     return res.status(200).json({
       success: true, data: paginated,

@@ -861,6 +861,24 @@ const startShiftTimer = () => {
 // Fetch recent submissions with user data - uses direct Supabase (no proxy) for reliability
 const fetchRecentSubmissionsWithUsers = async () => {
   try {
+    // Try live vendor API first
+    try {
+      const r = await fetch('/api/user-analytics?endpoint=active-recyclers&limit=10');
+      if (r.ok) {
+        const d = await r.json();
+        if (d.success && d.data && d.data.length > 0) {
+          recentSubmissionsWithUsers.value = d.data.slice(0, 10).map((u: any) => ({
+            id: u.userId || 0,
+            user_name: u.userName || u.userId,
+            submitted_at: u.lastSubmission || new Date().toISOString(),
+            api_weight: u.totalRecycled || 0,
+            users: { nickname: u.userName },
+            device_no: u.deviceNo,
+          }));
+          return;
+        }
+      }
+    } catch(e) {}
     let query = supabase.from('submission_reviews').select('*').order('submitted_at', { ascending: false }).limit(10);
     if (auth.merchantId) {
       query = query.eq('merchant_id', auth.merchantId);

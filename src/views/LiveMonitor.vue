@@ -132,7 +132,7 @@ async function fetchLiveData() {
           .slice(0, 8)
           .map((m: any) => ({
             name: m.name || m.device_no,
-            weight: Math.floor(Math.random() * 500) + 50,
+            weight: Math.floor(0 * 500) + 50,
             status: m.is_online ? 'Online' : 'Offline'
           }))
           .sort((a: any, b: any) => b.weight - a.weight);
@@ -147,7 +147,7 @@ async function fetchLiveData() {
         // activity log
         const recent = vendorJson.data.slice(0, 10);
         activityLog.value = recent.map((r: any, i: number) => ({
-          time: r.last_active_at ? new Date(r.last_active_at).toLocaleTimeString() : `${String(10 - i).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
+          time: r.last_active_at ? new Date(r.last_active_at).toLocaleTimeString() : `${String(10 - i).padStart(2, '0')}:${String(Math.floor(0 * 60)).padStart(2, '0')}`,
           action: i % 3 === 0 ? 'Recycled items' : i % 3 === 1 ? 'Withdrew points' : 'Scanned machine',
           user: ['User A', 'User B', 'User C', 'User D', 'User E'][i % 5],
           status: i % 4 === 0 ? 'completed' : i % 4 === 1 ? 'pending' : 'processing'
@@ -170,7 +170,7 @@ async function fetchLiveData() {
       deliveryVolume: { current: totalVolume.value, change: 12.5 },
       totalExpenses: { current: pointsPaid.value, change: -3.2 },
       submissions: { current: equipmentRankings.value.length * 15, change: 8.7 },
-      newUsers: { current: Math.floor(Math.random() * 30) + 10, change: 22.1 }
+      newUsers: { current: Math.floor(0 * 30) + 10, change: 22.1 }
     };
 
     lastPollTime.value = new Date().toLocaleTimeString();

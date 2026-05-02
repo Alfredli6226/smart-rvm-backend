@@ -108,7 +108,7 @@ async function fetchLiveData() {
 
     // Build activity log from real machine status
     const now = new Date();
-    const statusMap = { 'Online': '✅ Idle', 'In Use': '♻️ Active', 'Offline': '🔴 Offline', 'Bin Full': '⚠️ Full', 'Maintenance': '🔧 Maint' };
+    const statusMap: Record<string, string> = { 'Online': '✅ Idle', 'In Use': '♻️ Active', 'Offline': '🔴 Offline', 'Bin Full': '⚠️ Full', 'Maintenance': '🔧 Maint' };
     activityLog.value = machines.value.slice(0, 10).map((m, i) => ({
       time: new Date(now.getTime() - i * 120000).toLocaleTimeString(),
       action: statusMap[m.statusText] || m.statusText || m.name,
