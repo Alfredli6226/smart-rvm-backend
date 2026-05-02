@@ -47,7 +47,7 @@ function normalizeVendorDevice(v) {
     address: v.address || '',
     latitude: v.latitude || 0,
     longitude: v.longitude || 0,
-    is_online: v.isOnline === 1 || v.isOnline === true,
+    is_online: v.status === 1 || v.isOnline === 1 || v.isOnline === true,
     status: pickMachineStatus(v),
     signal: v.signalVal || 0,
     model: v.modelName || '',

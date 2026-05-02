@@ -106,7 +106,7 @@ export async function fetchVendorDevices() {
     address: d.address || '',
     latitude: parseFloat(d.latitude || d.lat || 0),
     longitude: parseFloat(d.longitude || d.lng || 0),
-    is_online: d.isOnline || d.status === 'ONLINE' || d.status === '1' || d.online === true || d.online === '1',
+    is_online: d.isOnline === 1 || d.isOnline === true || d.status === 1 || d.status === '1' || d.status === 'ONLINE' || d.online === true || d.online === '1',
     last_active_at: d.lastActiveTime || d.last_active_at || ''
   }));
 }

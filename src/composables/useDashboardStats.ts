@@ -30,13 +30,10 @@ export function useDashboardStats() {
   async function fetchStats() {
     const auth = useAuthStore();
 
-    if (auth.loading || !auth.role) {
-      return;
-    }
-
     loading.value = true;
 
     try {
+      // Always try to load public stats (even without auth)
       const merchantId = auth.merchantId || null;
 
       if (merchantId) {
