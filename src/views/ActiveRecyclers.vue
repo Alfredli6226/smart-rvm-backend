@@ -7,7 +7,7 @@ import {
   Users, Search, Download, Send, ChevronRight,
   Activity, Clock, MapPin, Phone, Mail,
   Scale, Leaf, Target, ChevronLeft,
-  RefreshCw, AlertCircle, X, Filter, Loader,
+  RefreshCw, AlertCircle, X, Filter, Loader, Leaf,
   Wifi, WifiOff, Eye, ChevronDown, FileSpreadsheet
 } from 'lucide-vue-next';
 import { useESGExport } from '../composables/useESGExport';
@@ -350,19 +350,50 @@ function progressColor(pct: number): string {
       </div>
     </div>
 
-    <!-- CO2 + Trees row -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      <div class="bg-emerald-50 rounded-xl p-3 sm:p-4 shadow-sm border border-emerald-100">
-        <p class="text-xs font-semibold text-emerald-600 uppercase tracking-wider">🌿 Total CO2 Saved</p>
-        <p class="text-xl sm:text-2xl font-extrabold text-emerald-700 mt-1">{{ liveCO2.toLocaleString() || summaryData.totalCarbon.toFixed(1) }} <span class="text-sm font-normal text-emerald-500">kg</span></p>
+    <!-- 🌿 Environmental Impact Section -->
+    <div class="bg-emerald-800 rounded-2xl shadow-lg p-4 sm:p-6 text-white">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center">
+          <Leaf :size="22" class="text-white" />
+        </div>
+        <div>
+          <h3 class="text-lg font-bold">Environmental Impact</h3>
+          <p class="text-emerald-200 text-xs">Real-time sustainability metrics</p>
+        </div>
       </div>
-      <div class="bg-green-50 rounded-xl p-3 sm:p-4 shadow-sm border border-green-100">
-        <p class="text-xs font-semibold text-green-600 uppercase tracking-wider">🌳 Trees Equivalent</p>
-        <p class="text-xl sm:text-2xl font-extrabold text-green-700 mt-1">{{ liveTrees || Math.round(summaryData.totalCarbon / 20) }}</p>
+      
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
+        <div class="text-center px-3 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+          <p class="text-2xl sm:text-3xl font-extrabold">{{ liveCO2.toLocaleString() || '-' }}</p>
+          <p class="text-[10px] text-emerald-200 uppercase tracking-wider font-medium">CO₂ Saved (kg)</p>
+        </div>
+        <div class="text-center px-3 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+          <p class="text-2xl sm:text-3xl font-extrabold">{{ liveTrees || '-' }}</p>
+          <p class="text-[10px] text-emerald-200 uppercase tracking-wider font-medium">🌳 Trees Equivalent</p>
+        </div>
+        <div class="text-center px-3 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+          <p class="text-2xl sm:text-3xl font-extrabold">{{ liveRecycledWeight ? liveRecycledWeight.toLocaleString() : '-' }}</p>
+          <p class="text-[10px] text-emerald-200 uppercase tracking-wider font-medium">♻️ Recycled (kg)</p>
+        </div>
       </div>
-      <div class="bg-blue-50 rounded-xl p-3 sm:p-4 shadow-sm border border-blue-100">
-        <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider">♻️ Total Recycled</p>
-        <p class="text-xl sm:text-2xl font-extrabold text-blue-700 mt-1">{{ liveRecycledWeight ? liveRecycledWeight.toLocaleString() : summaryData.totalRecycled.toFixed(1) }} <span class="text-sm font-normal text-blue-500">kg</span></p>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-white/10 rounded-lg p-3 text-center">
+          <p class="text-lg font-bold">{{ liveSubmissions || '-' }}</p>
+          <p class="text-[10px] text-emerald-200">Submissions</p>
+        </div>
+        <div class="bg-white/10 rounded-lg p-3 text-center">
+          <p class="text-lg font-bold">{{ liveActiveUsers || '-' }}</p>
+          <p class="text-[10px] text-emerald-200">Active Users</p>
+        </div>
+        <div class="bg-white/10 rounded-lg p-3 text-center">
+          <p class="text-lg font-bold">{{ liveOnlineMachines || '-' }}</p>
+          <p class="text-[10px] text-emerald-200">Online Machines</p>
+        </div>
+        <div class="bg-white/10 rounded-lg p-3 text-center">
+          <p class="text-lg font-bold">{{ liveTodayWeight ? liveTodayWeight.toFixed(1) : '-' }}</p>
+          <p class="text-[10px] text-emerald-200">Today (kg)</p>
+        </div>
       </div>
     </div>
 
