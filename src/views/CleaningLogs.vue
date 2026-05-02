@@ -185,7 +185,10 @@ watch(() => auth.role, (newRole) => {
             <td colspan="9" class="p-8 text-center text-gray-400">Loading records...</td>
           </tr>
           <tr v-else-if="filteredRecords.length === 0">
-            <td colspan="9" class="p-8 text-center text-gray-400">No cleaning records found.</td>
+            <td colspan="9" class="p-8 text-center text-gray-400">
+  <p class="text-lg mb-1">🧹 No cleaning records</p>
+  <p class="text-xs">Logs appear when collectors complete cleaning tasks</p>
+</td>
           </tr>
           
           <tr 

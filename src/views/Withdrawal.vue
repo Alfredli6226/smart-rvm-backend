@@ -294,7 +294,10 @@ watch(() => auth.role, (newRole) => {
 
           <tbody class="divide-y divide-gray-100 text-sm">
             <tr v-if="paginatedList.length === 0">
-              <td :colspan="activeTab === 'PENDING' ? 8 : 7" class="p-8 text-center text-gray-400">No requests found in {{ activeTab.toLowerCase() }}.</td>
+              <td :colspan="activeTab === 'PENDING' ? 8 : 7" class="p-8 text-center text-gray-400">
+  <p class="text-lg mb-1">📭 No requests</p>
+  <p class="text-xs">Withdrawals appear here when users cash out</p>
+</td>
             </tr>
 
             <tr 
