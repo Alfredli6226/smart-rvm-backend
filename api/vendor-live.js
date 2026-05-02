@@ -5,12 +5,14 @@ import crypto from 'crypto';
 // Points = Weight × RATE
 // Update these values as market rates change
 export const RECYCLING_RATES = {
+  // Dry recycling (plastic, paper, aluminum, glass all same rate)
   DEFAULT: parseFloat(process.env.RATE_DEFAULT || '0.20'),
+  PLASTIC: parseFloat(process.env.RATE_DEFAULT || '0.20'),
+  PAPER: parseFloat(process.env.RATE_DEFAULT || '0.20'),
+  ALUMINUM: parseFloat(process.env.RATE_DEFAULT || '0.20'),
+  GLASS: parseFloat(process.env.RATE_DEFAULT || '0.20'),
+  // UCO & Food Waste (separate rates)
   UCO: parseFloat(process.env.RATE_UCO || '2.50'),
-  PLASTIC: parseFloat(process.env.RATE_PLASTIC || '0.20'),
-  PAPER: parseFloat(process.env.RATE_PAPER || '0.10'),
-  ALUMINUM: parseFloat(process.env.RATE_ALUMINUM || '1.50'),
-  GLASS: parseFloat(process.env.RATE_GLASS || '0.05'),
   FOOD_WASTE: parseFloat(process.env.RATE_FOOD_WASTE || '0.30'),
 };
 
