@@ -1,24 +1,21 @@
-// ===== RVM Machines API — Combined Local + Vendor =====
-import { createClient } from '@supabase/supabase-js';
+// ===== RVM Machines API — User App Compatible =====
+// Uses the same endpoints as the user app (rvm-web-chi) for real-time data
 import crypto from 'crypto';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY;
-const MERCHANT_NO = process.env.MERCHANT_NO || process.env.VITE_MERCHANT_NO;
-const API_SECRET = process.env.API_SECRET || process.env.SECRET || process.env.VITE_API_SECRET;
+const MERCHANT_NO = process.env.MERCHANT_NO || process.env.VITE_MERCHANT_NO || '';
+const API_SECRET = process.env.API_SECRET || process.env.SECRET || process.env.VITE_API_SECRET || '';
 const VENDOR_BASE = 'https://api.autogcm.com';
 
-function md5(s) {
-  return crypto.createHash('md5').update(s, 'utf8').digest('hex');
-}
+function md5(s) { return crypto.createHash('md5').update(s, 'utf8').digest('hex'); }
 
 function vHeaders() {
   const ts = Date.now();
-  const sign = md5(`${MERCHANT_NO}${API_SECRET}${ts}`);
-  return { 'merchant-no': MERCHANT_NO, timestamp: String(ts), sign };
+  return {
+    'merchant-no': MERCHANT_NO,
+    'timestamp': String(ts),
+    'sign': md5(`${MERCHANT_NO}${API_SECRET}${ts}`),
+    'Content-Type': 'application/json'
+  };
 }
 
 async function vGet(path, params = {}) {
@@ -26,101 +23,105 @@ async function vGet(path, params = {}) {
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
   const res = await fetch(url.toString(), { headers: vHeaders() });
   const text = await res.text();
-  try {
-    return { ok: res.ok, data: JSON.parse(text) };
-  } catch {
-    return { ok: false, raw: text };
-  }
-}
-
-function pickMachineStatus(vendor) {
-  // "status": 0=offline, 1=online, isOnline: 0/1
-  if (vendor.isOnline === 1 || vendor.isOnline === true) return 'ONLINE';
-  if (vendor.status === 1) return 'ONLINE';
-  return 'OFFLINE';
-}
-
-function normalizeVendorDevice(v) {
-  return {
-    device_no: v.deviceNo || '',
-    name: v.deviceName || v.deviceNo || '',
-    address: v.address || '',
-    latitude: v.latitude || 0,
-    longitude: v.longitude || 0,
-    is_online: v.status === 1 || v.isOnline === 1 || v.isOnline === true,
-    status: pickMachineStatus(v),
-    signal: v.signalVal || 0,
-    model: v.modelName || '',
-    sn: v.sn || '',
-    last_active_at: v.updateTime || v.createTime || null,
-    created_at: v.createTime || null,
-    free_expiration: v.freeExpirationTime || null,
-    integral: v.integral || 0,
-    total_used_coins: v.totalUsedCoins || 0,
-    _source: 'vendor'
-  };
+  try { return { ok: res.ok, data: JSON.parse(text) }; }
+  catch { return { ok: false, raw: text }; }
 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    // 1. Try vendor API for live machine data
+    // 1. Get all devices from system API (basic info)
     const vendorResult = await vGet('/system/device/list');
-    let machines;
-    let source = 'vendor';
-
-    if (vendorResult.ok && vendorResult.data?.code === 200 && vendorResult.data?.data?.list) {
-      machines = vendorResult.data.data.list.map(normalizeVendorDevice);
-    } else if (vendorResult.ok && vendorResult.data?.data) {
-      // Direct array
-      const list = Array.isArray(vendorResult.data.data)
-        ? vendorResult.data.data
-        : vendorResult.data.data.list || [];
-      machines = list.map(normalizeVendorDevice);
-    } else {
-      // Fallback to Supabase
-      source = 'supabase';
-      if (SUPABASE_URL && SUPABASE_KEY) {
-        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-          auth: { autoRefreshToken: false, persistSession: false }
-        });
-        const { data } = await supabase.from('machines').select('*');
-        machines = (data || []).map((m) => ({ ...m, _source: 'supabase' }));
-      } else {
-        machines = [];
-      }
+    let devices = [];
+    if (vendorResult.ok && vendorResult.data?.data?.list) {
+      devices = vendorResult.data.data.list;
+    } else if (vendorResult.ok && vendorResult.data?.code === 200) {
+      const rows = vendorResult.data.data?.rows || vendorResult.data.data?.list || [];
+      devices = Array.isArray(rows) ? rows : [];
     }
 
-    // 2. Build device list for vendor status snapshot
-    const supabase = SUPABASE_URL && SUPABASE_KEY
-      ? createClient(SUPABASE_URL, SUPABASE_KEY, {
-          auth: { autoRefreshToken: false, persistSession: false }
-        })
-      : null;
+    if (devices.length === 0) {
+      devices = vendorResult.data?.data || [];
+      if (!Array.isArray(devices)) devices = [];
+    }
 
-    const onlineCount = machines.filter((m) => m.is_online || m.is_online === true).length;
+    // 2. For each device, get real-time position data (same as user app)
+    // Using /api/open/v1/device/position?deviceNo=X
+    const enriched = await Promise.all(devices.map(async (d) => {
+      const deviceNo = d.deviceNo || d.device_no || '';
+      let positionData = null;
+      
+      if (deviceNo) {
+        const posRes = await vGet('/api/open/v1/device/position', { deviceNo });
+        if (posRes.ok && posRes.data?.code === 200) {
+          positionData = posRes.data.data || [];
+        }
+      }
+
+      // Build compartments from position data (user app format)
+      const configs = Array.isArray(positionData) ? positionData : [];
+      const compartments = [];
+      
+      for (let i = 1; i <= 2; i++) {
+        const cfg = configs.find(c => c.positionNo === i) || {};
+        const weight = parseFloat(cfg.weight || 0);
+        const rate = cfg.rate !== undefined ? Math.round(Number(cfg.rate)) : 0;
+        const isFull = cfg.isFull === true || cfg.isFull === 'true';
+        const label = cfg.rubbishTypeName || (i === 1 ? 'Bin 1' : 'Bin 2');
+        
+        compartments.push({
+          label: label,
+          weight: weight.toFixed(2),
+          percent: isFull ? 100 : rate,
+          isFull: isFull,
+          status: cfg.status || 0
+        });
+      }
+
+      // Determine online status from vendor
+      const isOnline = d.status === 1 || d.isOnline === 1 || d.isOnline === true;
+      const statusText = configs.some(c => c.status === 1) ? 'In Use' : 
+                         isOnline ? 'Online' : 'Offline';
+
+      let mapsUrl = '#';
+      if (d.latitude && d.longitude) {
+        mapsUrl = `https://maps.google.com/?q=${d.latitude},${d.longitude}`;
+      }
+
+      return {
+        device_no: deviceNo,
+        name: d.deviceName || d.deviceNo || deviceNo || '',
+        address: d.address || '',
+        latitude: d.latitude || 0,
+        longitude: d.longitude || 0,
+        is_online: isOnline,
+        status: statusText,
+        signal: d.signalVal || 0,
+        model: d.modelName || '',
+        sn: d.sn || '',
+        last_active_at: d.updateTime || d.createTime || null,
+        compartments: compartments,
+        _source: 'vendor'
+      };
+    }));
+
+    const onlineCount = enriched.filter(m => m.is_online).length;
 
     return res.status(200).json({
       success: true,
-      data: machines,
-      source,
+      data: enriched,
       stats: {
-        total: machines.length,
+        total: enriched.length,
         online: onlineCount,
-        offline: machines.length - onlineCount
+        offline: enriched.length - onlineCount
       },
       timestamp: new Date().toISOString()
     });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: err.message,
-      data: []
-    });
+    return res.status(500).json({ success: false, error: err.message, data: [] });
   }
 }
