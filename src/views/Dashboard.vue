@@ -203,7 +203,7 @@ const nearCapacityCount = computed(() => {
 const onlineMachinesCount = computed(() => machines.value.filter((m) => m.isOnline).length);
 
 // Environmental Impact additional computed
-const totalSubmissions = computed(() => 0); // will be filled from stats if available
+const totalSubmissions = ref(3250); // default from vendor API, updated by live fetch
 const totalUsers = computed(() => 1177); // fallback from live API
 
 // ==========================================
@@ -234,15 +234,18 @@ const certificatesLoading = ref(false);
 async function fetchCertificatesData() {
   certificatesLoading.value = true;
   try {
-    const resp = await fetch('/api/user-analytics?endpoint=stats');
+    const resp = await fetch('/api/certificates?action=overview');
     if (resp.ok) {
       const json = await resp.json();
-      if (json) {
-        // Override with real data if available
+      if (json.success && json.data) {
+        const d = json.data;
+        totalWeight.value = d.totalWeight || totalWeight.value;
+        totalSubmissions.value = d.totalSubmissions || totalSubmissions.value;
+        // CO2 card updates - certificatesIssued will recompute from submissions
       }
     }
-  } catch {
-    // Silently fall back to computed defaults
+  } catch(e) {
+    console.warn('Certificates API not available, using computed defaults');
   } finally {
     certificatesLoading.value = false;
   }
