@@ -1,6 +1,22 @@
 // Vendor API Live Data — shared utility for real-time data fetching
 import crypto from 'crypto';
 
+// ===== RECYCLING RATES (adjustable per waste type) =====
+// Points = Weight × RATE
+// Update these values as market rates change
+export const RECYCLING_RATES = {
+  DEFAULT: parseFloat(process.env.RATE_DEFAULT || '0.20'),
+  UCO: parseFloat(process.env.RATE_UCO || '2.50'),
+  PLASTIC: parseFloat(process.env.RATE_PLASTIC || '0.20'),
+  PAPER: parseFloat(process.env.RATE_PAPER || '0.10'),
+  ALUMINUM: parseFloat(process.env.RATE_ALUMINUM || '1.50'),
+  GLASS: parseFloat(process.env.RATE_GLASS || '0.05'),
+};
+
+export function getRate(wasteType) {
+  return RECYCLING_RATES[wasteType] || RECYCLING_RATES.DEFAULT;
+}
+
 const MERCHANT_NO = process.env.MERCHANT_NO || process.env.VITE_MERCHANT_NO;
 const API_SECRET = process.env.API_SECRET || process.env.SECRET || process.env.VITE_API_SECRET;
 const VENDOR_BASE = 'https://api.autogcm.com';
@@ -73,8 +89,8 @@ export async function fetchRecentIntegralRecords(pages = 3) {
 // UCO:     Points = Weight × 2.5 → Weight = Points × 0.4 (÷ 2.5)
 export function integralToWeight(integralNum, wasteType) {
   const pts = parseFloat(integralNum) || 0;
-  if (wasteType === 'UCO') return pts * 0.4; // ÷ 2.5
-  return pts * 5; // ÷ 0.2 (default: regular recycling)
+  const rate = getRate(wasteType);
+  return pts / rate; // Weight = Points / Rate
 }
 
 export function score(integralNum) {
