@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'list') {
-      const users = Object.values(userMap).map((u: any) => ({
+      const users = Object.values(userMap).map((u) => ({
         userId: u.userId,
         totalWeight: +u.totalWeight.toFixed(1),
         totalPoints: +u.totalPoints.toFixed(1),
@@ -69,7 +69,7 @@ export default async function handler(req, res) {
 
     // Try to enrich with names from account/sync
     if (action === 'enrich') {
-      const users = Object.values(userMap) as any[];
+      const users = Object.values(userMap) ;
       const enriched = [];
       const batchSize = 3; // Max 3 at a time to avoid rate limit
       
