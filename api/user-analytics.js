@@ -237,36 +237,53 @@ async function getActiveRecyclers(req, res) {
   const THIRTY_DAYS_AGO = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   try {
-    const [userResp, machineResp] = await Promise.all([
-      vGet('/system/user/list', { page: 1, pageSize: 200, userType: 11 }),
-      vGet('/system/device/list', { page: 1, pageSize: 50 })
-    ]);
+    // Build active recyclers from integral records (reliable, always works)
+    const allRecords = await fetchAllIntegralRecords(70);
+    if (!allRecords || allRecords.length === 0) {
+      return res.status(200).json({
+        success: true, data: [],
+        pagination: { page, limit, total: 0, totalPages: 0, showingFrom: 0, showingTo: 0 },
+        summary: { totalRecycled: 0, activeCount: 0, recentlyActive: 0, totalCarbon: 0 },
+        source: 'integral'
+      });
+    }
 
-    const users = (userResp.ok && userResp.data?.data) ? userResp.data.data : [];
-    const machines = (machineResp.ok && machineResp.data?.data) ? machineResp.data.data : [];
-    const machineLookup = {};
-    for (const m of machines) machineLookup[m.deviceNo || m.device_no] = m.address || m.name || m.device_no;
+    // Group by userId
+    const userGroups = {};
+    for (const r of allRecords) {
+      const uid = r.userId || 'unknown';
+      if (!userGroups[uid]) userGroups[uid] = { 
+        userId: uid, records: [], totalWeight: 0, totalPoints: 0, 
+        firstSeen: r.recordedTime || r.createTime || now.toISOString(),
+        lastSeen: r.recordedTime || r.createTime || ''
+      };
+      userGroups[uid].records.push(r);
+      userGroups[uid].totalWeight += integralToWeight(r.integralNum);
+      userGroups[uid].totalPoints += score(r.integralNum);
+      if ((r.recordedTime || r.createTime || '') > userGroups[uid].lastSeen) {
+        userGroups[uid].lastSeen = r.recordedTime || r.createTime || '';
+      }
+    }
 
-    let recyclers = [];
-    for (const [uid, ug] of Object.entries(userGroups)) {
+    let recyclers = Object.entries(userGroups).map(([uid, ug]) => {
       const weight = ug.totalWeight / 3; // Month estimate ≈ 1/3 of total
       const lastActive = ug.lastSeen || now.toISOString();
       const isRecentlyActive = lastActive ? new Date(lastActive) >= THIRTY_DAYS_AGO : false;
       const secAgo = lastActive ? Math.floor((now.getTime() - new Date(lastActive).getTime()) / 1000) : 999999;
-      recyclers.push({
+      return {
         userId: uid,
-        userName: `User ${uid.slice(-6)}`,
+        userName: 'User ' + uid.slice(-6),
         email: '', phone: '',
         machineLocation: ug.records[0]?.deviceProductName || 'Unknown',
-        totalRecycled: parseFloat(weight.toFixed(1)),
+        totalRecycled: +weight.toFixed(1),
         monthlyGoal: MONTHLY_GOAL_KG,
         progress: Math.min(100, Math.round((weight / MONTHLY_GOAL_KG) * 100)),
-        carbonSaved: parseFloat((weight * CO2_PER_KG).toFixed(1)),
+        carbonSaved: +(weight * CO2_PER_KG).toFixed(1),
         lastSubmission: lastActive,
         status: secAgo < 300 ? 'active_now' : isRecentlyActive ? 'recently_active' : 'inactive',
         deviceNo: ug.records[0]?.deviceNo || ''
-      });
-    }
+      };
+    });
 
     recyclers.sort((a, b) => {
       if (a.status === 'active_now' && b.status !== 'active_now') return -1;
@@ -281,28 +298,26 @@ async function getActiveRecyclers(req, res) {
     const total = recyclers.length;
     const paginated = recyclers.slice(offset, offset + limit);
 
-    // No fallback data - only show real recyclers from vendor API
-
     return res.status(200).json({
       success: true, data: paginated,
       pagination: {
         page, limit, total,
-        totalPages: Math.ceil(Math.max(total, 10) / limit),
+        totalPages: Math.ceil(Math.max(total, 1) / limit),
         showingFrom: offset + 1,
-        showingTo: Math.min(offset + limit, Math.max(total, 10))
+        showingTo: Math.min(offset + limit, Math.max(total, 0))
       },
       summary: {
-        totalRecycled: parseFloat(recyclers.reduce((s, r) => s + r.totalRecycled, 0).toFixed(1)),
+        totalRecycled: +recyclers.reduce((s, r) => s + r.totalRecycled, 0).toFixed(1),
         activeCount: recyclers.filter(r => r.status === 'active_now').length,
         recentlyActive: recyclers.filter(r => r.status === 'recently_active').length,
-        totalCarbon: parseFloat(recyclers.reduce((s, r) => s + r.carbonSaved, 0).toFixed(1))
-      }
+        totalCarbon: +recyclers.reduce((s, r) => s + r.carbonSaved, 0).toFixed(1)
+      },
+      source: 'integral'
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Failed to load active recyclers data' });
   }
 }
-
 // ===== CO2 / ESG Certificate Endpoints =====
 const IMPACT = {
   CO2_PER_KG_PLASTIC: 1.5, CO2_PER_KG_ALUMINUM: 9.0,
