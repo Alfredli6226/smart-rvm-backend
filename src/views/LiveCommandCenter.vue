@@ -74,7 +74,7 @@ const comparisonData = computed(() => ({
   deliveryVolume: { current: totalVolume.value, change: 12.5 },
   totalExpenses: { current: pointsPaid.value, change: -3.2 },
   submissions: { current: equipmentRankings.value.length * 15, change: 8.7 },
-  newUsers: { current: Math.floor(Math.random() * 15) + 25, change: 22.1 }
+  newUsers: { current: 0, change: 0 }
 }));
 
 // ==========================================
