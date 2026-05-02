@@ -30,13 +30,14 @@ export function useDashboardStats() {
   async function fetchStats() {
     // Load live vendor data immediately (works even without auth)
     try {
-      const r = await fetch('/api/reports?action=overview');
+      // Use user-analytics stats (ALL 3250 records) instead of reports (only 250 recent)
+      const r = await fetch('/api/user-analytics?endpoint=stats');
       if (r.ok) {
         const d = await r.json();
         if (d.liveFromVendor && parseFloat(d.totalWeight) > 0) {
           totalWeight.value = parseFloat(d.totalWeight);
           totalPoints.value = parseFloat(d.totalPoints) || 0;
-          pendingCount.value = Number(d.recentSubmissions) || 0;
+          pendingCount.value = Number(d.totalSubmissions) || 0;
         }
       }
     } catch(e) { /* fallback to Supabase */ }
