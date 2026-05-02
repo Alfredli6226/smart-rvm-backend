@@ -65,7 +65,7 @@ export default async function handler(req, res) {
           enrichedMap[uid] = {
             userId: uid,
             name: u.nickname || u.phone || 'User',
-            totalWeight: wt,
+            totalWeight: 0,
             totalPoints: 0,
             submissions: 0,
             lastSeen: '',
