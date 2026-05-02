@@ -87,11 +87,24 @@ export default async function handler(req, res) {
     
     const enriched = Object.values(enrichedMap);
     enriched.sort((a, b) => b.totalWeight - a.totalWeight);
+    
+    // Calculate totals
+    const supabaseTotal = Array.isArray(userRes) 
+      ? userRes.reduce((s, u) => s + (parseFloat(u.total_weight || 0)), 0)
+      : 0;
+    const vendorTotal = Object.values(userGroups).reduce((s, u) => s + (u.totalWeight || 0), 0);
 
     return res.status(200).json({
       success: true,
       total: enriched.length,
       source: 'merged',
+      stats: {
+        totalWeight: +supabaseTotal.toFixed(1),
+        vendorWeight: +vendorTotal.toFixed(1),
+        supabaseWeight: +supabaseTotal.toFixed(1),
+        usersWithWeight: enriched.filter(u => u.totalWeight > 0).length,
+        totalUsers: enriched.length
+      },
       users: enriched
     });
   } catch (err) {
