@@ -238,8 +238,8 @@ async function getActiveRecyclers(req, res) {
 
   try {
     const [userResp, machineResp] = await Promise.all([
-      vGet('/api/open/v1/user/list', { page: 1, pageSize: 200 }),
-      vGet('/api/open/v1/device/list', { page: 1, pageSize: 50 })
+      vGet('/system/user/list', { page: 1, pageSize: 200, userType: 11 }),
+      vGet('/system/device/list', { page: 1, pageSize: 50 })
     ]);
 
     const users = (userResp.ok && userResp.data?.data) ? userResp.data.data : [];
