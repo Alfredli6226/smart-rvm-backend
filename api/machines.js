@@ -1,57 +1,50 @@
 // ===== RVM Machines API — User App Compatible =====
-// Uses the same endpoints as the user app (rvm-web-chi) for real-time data
+// Uses /system/device/list for device info + /api/open/v1/device/position for bin data
 import crypto from 'crypto';
 
+const VENDOR_BASE = 'https://api.autogcm.com';
 const MERCHANT_NO = process.env.MERCHANT_NO || process.env.VITE_MERCHANT_NO || '';
 const API_SECRET = process.env.API_SECRET || process.env.SECRET || process.env.VITE_API_SECRET || '';
-const VENDOR_BASE = 'https://api.autogcm.com';
 
 function md5(s) { return crypto.createHash('md5').update(s, 'utf8').digest('hex'); }
 
 function vHeaders() {
   const ts = Date.now();
-  return {
-    'merchant-no': MERCHANT_NO,
-    'timestamp': String(ts),
-    'sign': md5(`${MERCHANT_NO}${API_SECRET}${ts}`),
-    'Content-Type': 'application/json'
-  };
+  return { 'merchant-no': MERCHANT_NO, 'timestamp': String(ts), 'sign': md5(`${MERCHANT_NO}${API_SECRET}${ts}`) };
 }
 
 async function vGet(path, params = {}) {
   const url = new URL(path, VENDOR_BASE);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
-  const res = await fetch(url.toString(), { headers: vHeaders() });
-  const text = await res.text();
-  try { return { ok: res.ok, data: JSON.parse(text) }; }
-  catch { return { ok: false, raw: text }; }
+  try {
+    const res = await fetch(url.toString(), { headers: vHeaders() });
+    const text = await res.text();
+    try { return { ok: res.ok, data: JSON.parse(text) }; }
+    catch { return { ok: false, raw: text }; }
+  } catch(e) { return { ok: false, error: e.message }; }
 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    // 1. Get all devices from system API (basic info)
-    const vendorResult = await vGet('/system/device/list');
+    // 1. Get device list (basic info from vendor)
+    const listRes = await vGet('/system/device/list');
     let devices = [];
-    if (vendorResult.ok && vendorResult.data?.data?.list) {
-      devices = vendorResult.data.data.list;
-    } else if (vendorResult.ok && vendorResult.data?.code === 200) {
-      const rows = vendorResult.data.data?.rows || vendorResult.data.data?.list || [];
-      devices = Array.isArray(rows) ? rows : [];
+    if (listRes.ok && listRes.data) {
+      const payload = listRes.data.data || listRes.data;
+      devices = payload.list || payload.rows || (Array.isArray(payload) ? payload : []);
     }
 
     if (devices.length === 0) {
-      devices = vendorResult.data?.data || [];
-      if (!Array.isArray(devices)) devices = [];
+      return res.status(200).json({ success: true, data: [], stats: { total: 0, online: 0, offline: 0 } });
     }
 
-    // 2. For each device, get real-time position data (same as user app)
-    // Using /api/open/v1/device/position?deviceNo=X
-    const enriched = await Promise.all(devices.map(async (d) => {
+    // 2. For each device, get real-time position data (bin levels from user app endpoint)
+    const enriched = [];
+    for (const d of devices) {
       const deviceNo = d.deviceNo || d.device_no || '';
       let positionData = null;
       
@@ -62,63 +55,51 @@ export default async function handler(req, res) {
         }
       }
 
-      // Build compartments from position data (user app format)
       const configs = Array.isArray(positionData) ? positionData : [];
-      const compartments = [];
-      
-      for (let i = 1; i <= 2; i++) {
-        const cfg = configs.find(c => c.positionNo === i) || {};
-        const weight = parseFloat(cfg.weight || 0);
-        const rate = cfg.rate !== undefined ? Math.round(Number(cfg.rate)) : 0;
-        const isFull = cfg.isFull === true || cfg.isFull === 'true';
-        const label = cfg.rubbishTypeName || (i === 1 ? 'Bin 1' : 'Bin 2');
-        
-        compartments.push({
-          label: label,
-          weight: weight.toFixed(2),
-          percent: isFull ? 100 : rate,
-          isFull: isFull,
-          status: cfg.status || 0
-        });
-      }
 
-      // Determine online status from vendor
-      const isOnline = d.status === 1 || d.isOnline === 1 || d.isOnline === true;
-      const statusText = configs.some(c => c.status === 1) ? 'In Use' : 
-                         isOnline ? 'Online' : 'Offline';
+      // Build compartments from position data
+      const compartments = configs.map(cfg => ({
+        label: cfg.rubbishTypeName || 'Unknown',
+        weight: String(cfg.weight || 0),
+        percent: cfg.isFull ? 100 : (cfg.rate ? Math.round(Number(cfg.rate)) : 0),
+        isFull: cfg.isFull === true || cfg.isFull === 'true',
+        maxWeight: cfg.maxWeight || 100, 
+        rate: cfg.rate || 0,
+        clearTime: cfg.clearTime || '',
+        cameraNo: cfg.cameraNo || 0
+      }));
 
-      let mapsUrl = '#';
-      if (d.latitude && d.longitude) {
-        mapsUrl = `https://maps.google.com/?q=${d.latitude},${d.longitude}`;
-      }
+      // Online status from device list
+      const online = d.isOnline === 1 || d.isOnline === true || d.status === 1;
+      const lastOnline = d.lastOnlineTime || d.updateTime || '';
 
-      return {
+      // Machine type identifier
+      const isUCO = ['071582000006','071582000007','071582000008','071582000009','071582000010'].includes(deviceNo);
+      const machineType = isUCO ? 'UCO' : 'Mixed Recycle';
+
+      enriched.push({
         device_no: deviceNo,
-        name: d.deviceName || d.deviceNo || deviceNo || '',
+        name: d.address ? d.address.split(',')[0] : (d.deviceNo || deviceNo),
         address: d.address || '',
-        latitude: d.latitude || 0,
-        longitude: d.longitude || 0,
-        is_online: isOnline,
-        status: statusText,
+        latitude: parseFloat(d.latitude || 0),
+        longitude: parseFloat(d.longitude || 0),
+        is_online: online,
         signal: d.signalVal || 0,
         model: d.modelName || '',
-        sn: d.sn || '',
-        last_active_at: d.updateTime || d.createTime || null,
+        machine_type: machineType,
+        rate: isUCO ? 2.50 : 0.20,
+        last_online: lastOnline,
         compartments: compartments,
         _source: 'vendor'
-      };
-    }));
+      });
+    }
 
     const onlineCount = enriched.filter(m => m.is_online).length;
 
     return res.status(200).json({
       success: true,
       data: enriched,
-      stats: {
-        total: enriched.length,
-        online: onlineCount,
-        offline: enriched.length - onlineCount
-      },
+      stats: { total: enriched.length, online: onlineCount, offline: enriched.length - onlineCount },
       timestamp: new Date().toISOString()
     });
   } catch (err) {
