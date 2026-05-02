@@ -349,13 +349,10 @@ function calcESGImpact(weight) {
 }
 
 async function handleCertificate(req, res) {
-  try {
-    const supabase = createClient(...);
-  } catch(e) {}
-  const { fetchAllIntegralRecords, integralToWeight } = await import('./vendor-live.js');
+  const { fetchAllIntegralRecords, integralToWeight, fetchVendorDevices } = await import('./vendor-live.js');
   const [records, devices] = await Promise.all([
     fetchAllIntegralRecords(70),
-    import('./vendor-live.js').then(m => m.fetchVendorDevices ? m.fetchVendorDevices() : [])
+    fetchVendorDevices().catch(() => [])
   ]);
   const totalWeight = records.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
   const totalPoints = records.reduce((s, r) => s + +(r.integralNum || 0), 0);
