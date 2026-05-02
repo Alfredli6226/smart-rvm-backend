@@ -57,6 +57,10 @@ export default async function handler(req, res) {
         return await getWasteDistribution(res);
       case 'active-recyclers':
         return await getActiveRecyclers(req, res);
+      case 'cert-overview':
+      case 'cert-user':
+      case 'cert-breakdown':
+        return await handleCertificate(req, res);
       default:
         return res.status(404).json({ error: `Unknown endpoint: ${endpoint}` });
     }
