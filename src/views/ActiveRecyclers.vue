@@ -99,27 +99,16 @@ async function fetchActiveRecyclers() {
   } catch (err: any) {
     error.value = 'Failed to load active recyclers data: ' + err.message;
     console.error('Active Recyclers fetch error:', err);
-    // Fallback sample data
-    recyclers.value = generateSampleData();
+    // No data available
+    recyclers.value = [];
     totalItems.value = recyclers.value.length;
-    totalPages.value = 1;
+    totalPages.value = 0;
   } finally {
     loading.value = false;
   }
 }
 
-function generateSampleData() {
-  const sample = [
-    { userId: '1173008', userName: 'Sindylee', email: 'sindylee@email.com', phone: '0166927737', machineLocation: 'Meranti Apartment, Subang Jaya', totalRecycled: 45.2, monthlyGoal: 50, progress: 90, carbonSaved: 38.4, lastSubmission: new Date(Date.now() - 120000).toISOString(), status: 'active_now', deviceNo: '071582000001' },
-    { userId: '1404752', userName: 'EcoWarrior', email: 'ecowarrior@email.com', phone: '0123456789', machineLocation: 'Taman Wawasan, Puchong', totalRecycled: 38.0, monthlyGoal: 50, progress: 76, carbonSaved: 32.3, lastSubmission: new Date(Date.now() - 600000).toISOString(), status: 'active_now', deviceNo: '071582000002' },
-    { userId: '1378848', userName: 'GreenHero', email: 'greenhero@email.com', phone: '0112345678', machineLocation: 'Idaman Bukit Jelutong, Shah Alam', totalRecycled: 32.5, monthlyGoal: 50, progress: 65, carbonSaved: 27.6, lastSubmission: new Date(Date.now() - 1800000).toISOString(), status: 'recently_active', deviceNo: '071582000003' },
-    { userId: '1378850', userName: 'RecycleKing', email: 'recycleking@email.com', phone: '0198765432', machineLocation: 'KL City Centre', totalRecycled: 28.3, monthlyGoal: 50, progress: 57, carbonSaved: 24.1, lastSubmission: new Date(Date.now() - 3600000).toISOString(), status: 'recently_active', deviceNo: '071582000004' },
-    { userId: '1380001', userName: 'EarthSaver', email: 'earths aver@email.com' as string, phone: '0171112223', machineLocation: 'Ampang Point', totalRecycled: 22.7, monthlyGoal: 50, progress: 45, carbonSaved: 19.3, lastSubmission: new Date(Date.now() - 7200000).toISOString(), status: 'recently_active', deviceNo: '071582000005' },
-    { userId: '1380002', userName: 'PlasticFree', email: 'plasticfree@email.com', phone: '0135556667', machineLocation: 'Cheras Leisure Mall', totalRecycled: 18.1, monthlyGoal: 50, progress: 36, carbonSaved: 15.4, lastSubmission: new Date(Date.now() - 14400000).toISOString(), status: 'recently_active', deviceNo: '071582000006' },
-    { userId: '1380003', userName: 'GreenMachine', email: 'greenmachine@email.com', phone: '0187778889', machineLocation: 'Putrajaya Presint 9', totalRecycled: 15.5, monthlyGoal: 50, progress: 31, carbonSaved: 13.2, lastSubmission: new Date(Date.now() - 21600000).toISOString(), status: 'recently_active', deviceNo: '071582000007' },
-  ];
-  return sample;
-}
+
 
 // ==========================================
 // TIME HELPER
@@ -194,22 +183,11 @@ async function exportESGReport() {
         collections: d.totalSubmissions || 0
       }, 'All Time', 'MyGreenPlus');
     } else {
-      // Fallback with local data
-      const totalWt = recyclers.value.reduce((s, r) => s + r.totalRecycled, 0);
-      await generateReport({
-        weight: totalWt || 1000,
-        users: new Set(recyclers.value.map(r => r.userId)).size || 50,
-        points: 0,
-        machines: machines.value.length || 10,
-        collections: recyclers.value.length || 100
-      }, 'Current Period', 'MyGreenPlus');
+      alert('Could not fetch live data for ESG report. Try again later.');
     }
   } catch(e) {
-    console.warn('ESG export fallback:', e);
-    const totalWt = recyclers.value.reduce((s, r) => s + r.totalRecycled, 0);
-    await generateReport({
-      weight: totalWt || 1000, users: 50, points: 0, machines: 10, collections: 100
-    }, 'Current Period', 'MyGreenPlus');
+    console.warn('ESG export failed:', e);
+    alert('ESG report generation failed. Please try again.');
   }
 }
 

@@ -267,7 +267,7 @@ const onlineMachinesCount = computed(() => machines.value.filter((m) => m.isOnli
 
 // Environmental Impact additional computed
 const totalSubmissions = ref(3250); // default from vendor API, updated by live fetch
-const totalUsers = computed(() => 1177); // fallback from live API
+const totalUsers = computed(() => 0); // populated by live API
 
 // ==========================================
 // Certificates Overview (Admin/Merchant view)
@@ -278,7 +278,7 @@ const MONTHLY_TARGET_KG = 5000;
 
 // Total Certificates Issued
 const certificatesIssued = computed(() => {
-  return Math.max(0, Math.round(totalSubmissions.value * 0.15)) || 486;
+  return Math.max(0, Math.round(totalSubmissions.value * 0.15));
 });
 
 // Target Completion Rate
@@ -289,7 +289,7 @@ const targetCompletionRate = computed(() => {
 
 // Active Recyclers
 const activeRecyclers = computed(() => {
-  return Math.max(0, Math.round(totalUsers.value * 0.6)) || 702;
+  return Math.max(0, Math.round(totalUsers.value * 0.6));
 });
 
 const certificatesLoading = ref(false);
