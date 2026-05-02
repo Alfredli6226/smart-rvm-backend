@@ -45,8 +45,6 @@ export function useDashboardStats() {
     loading.value = true;
 
     try {
-      const merchantId = auth.merchantId || null;
-      const merchantId = auth.merchantId || null;
 
       if (merchantId) {
         const [pendingRes, recWRes, recCRes, walletsRes] = await Promise.all([
