@@ -108,7 +108,7 @@ export function useUserList() {
         if (d.success && Array.isArray(d.data) && d.data.length > 0) {
           users.value = d.data.map((u, i) => ({
             id: u.userId || i, user_id: u.userId || '',
-            nickname: u.userName || 'User', phone: u.phone || '',
+            nickname: u.userName || ('User ' + (u.userId || u.id || '').slice(-6)), phone: u.phone || '',
             email: u.email || '', total_weight: u.totalRecycled || 0,
             total_points: u.carbonSaved || 0, balance: 0, earnings: 0,
             last_active_at: u.lastSubmission || '', status: u.status || '',
