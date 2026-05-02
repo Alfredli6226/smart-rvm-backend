@@ -37,7 +37,6 @@ export function useDashboardStats() {
         if (d.liveFromVendor && parseFloat(d.totalWeight) > 0) {
           totalWeight.value = parseFloat(d.totalWeight);
           totalPoints.value = parseFloat(d.totalPoints) || 0;
-          pendingCount.value = Number(d.totalSubmissions) || 0;
         }
       }
     } catch(e) { /* fallback to Supabase */ }
