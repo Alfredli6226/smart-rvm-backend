@@ -11,6 +11,7 @@ export const RECYCLING_RATES = {
   PAPER: parseFloat(process.env.RATE_PAPER || '0.10'),
   ALUMINUM: parseFloat(process.env.RATE_ALUMINUM || '1.50'),
   GLASS: parseFloat(process.env.RATE_GLASS || '0.05'),
+  FOOD_WASTE: parseFloat(process.env.RATE_FOOD_WASTE || '0.30'),
 };
 
 export function getRate(wasteType) {
@@ -107,6 +108,7 @@ export function classifyWasteType(record) {
   if (name.includes('纸') || name.includes('paper') || name.includes('cardboard')) return 'Paper';
   if (name.includes('glass') || name.includes('玻璃')) return 'Glass';
   // Default: check if device type suggests mixed recycling
+  if (name.includes('food') || name.includes('厨房') || name.includes('foodwaste') || name.includes('organic') || name.includes('compost')) return 'Food Waste';
   if (name.includes('回收') || name.includes('回收柜') || name.includes('rvm') || name.includes('recycle')) return 'Recyclables';
   return 'Mixed';
 }
@@ -131,4 +133,17 @@ export async function fetchVendorDevices() {
   }));
 }
 
-export default { fetchAllIntegralRecords, fetchRecentIntegralRecords, integralToWeight, score, classifyWasteType, fetchVendorDevices };
+// Waste categories for reporting
+export const WASTE_CATEGORIES = {
+  DRY: ['Plastic', 'Aluminum', 'Paper', 'Glass', 'Recyclables', 'Mixed'],
+  UCO: ['UCO'],
+  FOOD: ['Food Waste'],
+};
+
+export function getCategory(wasteType) {
+  if (WASTE_CATEGORIES.UCO.includes(wasteType)) return 'UCO';
+  if (WASTE_CATEGORIES.FOOD.includes(wasteType)) return 'Food Waste';
+  return 'Dry Recycling';
+}
+
+export default { fetchAllIntegralRecords, fetchRecentIntegralRecords, integralToWeight, score, classifyWasteType, fetchVendorDevices, RECYCLING_RATES, getRate, WASTE_CATEGORIES, getCategory };

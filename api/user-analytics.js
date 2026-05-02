@@ -1,5 +1,5 @@
 // ===== User Analytics — Real-time from Vendor API =====
-import { fetchAllIntegralRecords, fetchRecentIntegralRecords, integralToWeight, score, classifyWasteType, fetchVendorDevices } from './vendor-live.js';
+import { fetchAllIntegralRecords, fetchRecentIntegralRecords, integralToWeight, score, classifyWasteType, fetchVendorDevices, getCategory } from './vendor-live.js';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
@@ -365,6 +365,18 @@ async function handleCertificate(req, res) {
 
   const endpoint = req.query.endpoint;
 
+  // Category breakdown (Dry Recycling vs UCO vs Food Waste)
+  const catData = { 'Dry Recycling': { weight: 0, points: 0, subs: 0 }, 'UCO': { weight: 0, points: 0, subs: 0 }, 'Food Waste': { weight: 0, points: 0, subs: 0 } };
+  records.forEach(r => {
+    const type = classifyWasteType(r);
+    const cat = getCategory ? getCategory(type) : 'Dry Recycling';
+    if (!catData[cat]) catData[cat] = { weight: 0, points: 0, subs: 0 };
+    catData[cat].weight += integralToWeight(r.integralNum, type);
+    catData[cat].points += score(r.integralNum);
+    catData[cat].subs++;
+  });
+  Object.keys(catData).forEach(k => { catData[k].weight = +catData[k].weight.toFixed(1); catData[k].points = +catData[k].points.toFixed(1); });
+
   if (endpoint === 'cert-overview') {
     return res.status(200).json({
       success: true,
@@ -376,7 +388,8 @@ async function handleCertificate(req, res) {
         todayCarbonSaved: todayImpact.totalCo2, todayTreesEquivalent: todayImpact.treesEquivalent,
         machineCount: (Array.isArray(devices) ? devices.length : 10), onlineCount: 7,
         filteredWeight: +filteredWeight.toFixed(1), filteredCarbonSaved: filteredImpact.totalCo2,
-        filteredTreesEquivalent: filteredImpact.treesEquivalent
+        filteredTreesEquivalent: filteredImpact.treesEquivalent,
+        categoryBreakdown: catData
       }, timestamp: new Date().toISOString()
     });
   }
