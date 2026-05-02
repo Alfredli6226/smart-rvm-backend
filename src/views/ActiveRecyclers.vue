@@ -15,6 +15,14 @@ const machineStore = useMachineStore();
 const { machines } = storeToRefs(machineStore);
 const { totalWeight, totalPoints, fetchStats } = useDashboardStats();
 
+const machineOptions = computed(() => {
+  const opts = [{ value: 'all', label: 'All Machines' }];
+  for (const m of machines.value) {
+    opts.push({ value: m.deviceNo || String(m.id), label: m.name || m.deviceNo || ('Machine ' + m.id) });
+  }
+  return opts;
+});
+
 // ==========================================
 // STATE
 // ==========================================
@@ -22,6 +30,7 @@ const recyclers = ref<any[]>([]);
 const loading = ref(true);
 const error = ref('');
 const search = ref('');
+const machineFilter = ref('all');
 const page = ref(1);
 const limit = 20;
 const totalItems = ref(0);
@@ -43,7 +52,19 @@ const isLive = ref(true);
 // COMPUTED
 // ==========================================
 const filteredRecyclers = computed(() => {
-  return recyclers.value;
+  let result = recyclers.value;
+  if (machineFilter.value !== 'all') {
+    result = result.filter(r => r.deviceNo === machineFilter.value || (r.machineLocation && r.machineLocation.includes(machineFilter.value)));
+  }
+  if (search.value) {
+    const q = search.value.toLowerCase();
+    result = result.filter(r =>
+      r.userName.toLowerCase().includes(q) ||
+      r.phone.includes(q) ||
+      (r.machineLocation && r.machineLocation.toLowerCase().includes(q))
+    );
+  }
+  return result;
 });
 
 const showingText = computed(() => {
@@ -144,7 +165,41 @@ function closeEncourage() {
 // EXPORT
 // ==========================================
 function exportActiveUsers() {
-  alert('Export Active Users List: Data will be downloaded as CSV.');
+  const data = filteredRecyclers.value;
+  if (data.length === 0) { alert('No data to export.'); return; }
+  let csv = 'User,Phone,Email,Machine,Recycled(kg),Carbon(kg),Status\n';
+  for (const r of data) {
+    csv += '"' + r.userName + '","' + r.phone + '","' + r.email + '","' + r.machineLocation + '",' + r.totalRecycled + ',' + (r.carbonSaved || 0) + ',"' + r.status + '"\n';
+  }
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'recyclers_report_' + new Date().toISOString().slice(0,10) + '.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function generateMachineReport() {
+  const selected = machineFilter.value;
+  if (selected === 'all') { alert('Select a specific machine first.'); return; }
+  const machine = machineOptions.value.find(m => m.value === selected);
+  const data = recyclers.value.filter(r => r.deviceNo === selected || (r.machineLocation && r.machineLocation.includes(selected)));
+  const totalWt = data.reduce((s, r) => s + r.totalRecycled, 0);
+  const totalCO2 = data.reduce((s, r) => s + (r.carbonSaved || 0), 0);
+  const now = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  let report = '=== RECYCLING REPORT ===\n';
+  report += 'Machine: ' + (machine?.label || selected) + '\n';
+  report += 'Date: ' + now + '\n';
+  report += 'Total Recyclers: ' + data.length + '\n';
+  report += 'Total Weight: ' + totalWt.toFixed(1) + ' kg\n';
+  report += 'Total CO2 Saved: ' + totalCO2.toFixed(1) + ' kg\n';
+  report += 'Trees Equivalent: ' + Math.round(totalCO2 / 20) + '\n';
+  report += '\n--- Recyclers ---\n';
+  for (const r of data) {
+    report += r.userName + ' | ' + r.phone + ' | ' + r.totalRecycled + 'kg | ' + (r.carbonSaved || 0) + 'kg CO2\n';
+  }
+  const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'machine_report_' + selected + '_' + now + '.txt'; a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ==========================================
@@ -286,6 +341,12 @@ function progressColor(pct: number): string {
           />
         </div>
         <div class="flex items-center gap-2 shrink-0">
+          <select v-model="machineFilter" class="px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option v-for="opt in machineOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+          <button @click="generateMachineReport" class="px-3 py-2 rounded-lg text-xs font-semibold border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition">
+            📋 Report
+          </button>
           <RefreshCw
             :size="16"
             class="text-gray-400 cursor-pointer hover:text-blue-600 transition"
