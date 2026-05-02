@@ -245,7 +245,7 @@ const exportToPdf = () => {
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
-      <div class="overflow-x-auto w-full max-w-[calc(100vw-6rem)] md:max-w-[calc(100vw-18rem)]">
+      <div class="overflow-x-auto w-full max-w-[calc(100vw-1.5rem)] sm:max-w-[calc(100vw-6rem)] md:max-w-[calc(100vw-18rem)]">
         <table class="w-full text-left whitespace-nowrap">
           <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
             <tr>

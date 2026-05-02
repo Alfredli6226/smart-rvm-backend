@@ -126,6 +126,114 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, synced, errors, details });
     }
 
+    // ===== SYNC RUBBISH (recycling submissions) =====
+    if (action === 'sync-rubbish') {
+      let page = 1, synced = 0, errors = 0, total = 0;
+      const pageSize = 50;
+      while (true) {
+        const r = await vget('/system/rubbish/put', { pageNum: page, pageSize });
+        if (!r.data || r.data.code !== 200) {
+          return res.status(502).json({ error: 'vendor down', detail: r.data?.msg, synced, errors });
+        }
+        if (page === 1) total = parseInt(r.data.data.total) || 0;
+        const rows = r.data.data.list || [];
+        if (rows.length === 0) break;
+        for (const rec of rows) {
+          try {
+            // Map rubbishLogDetailsVOList to waste_type string
+            const details = rec.rubbishLogDetailsVOList || [];
+            const wasteTypes = details.map((d) => d.rubbishName).filter(Boolean);
+            const wasteType = wasteTypes.join(' / ') || 'General';
+
+            // Calculate total from detail weights
+            const detailWeight = details.reduce((s, d) => s + parseFloat(d.weight || 0), 0);
+
+            const record = {
+              vendor_record_id: String(rec.id),
+              user_id: String(rec.userId || ''),
+              device_no: rec.deviceNo || '',
+              waste_type: wasteType,
+              api_weight: parseFloat(rec.reviewWeight || rec.weight || 0),
+              total_weight: parseFloat(detailWeight || rec.weight || 0),
+              weight: parseFloat(rec.weight || 0),
+              points_awarded: parseFloat(detailWeight > 0
+                ? details.reduce((s, d) => s + parseFloat(d.integral || 0), 0)
+                : rec.integral || 0),
+              phone: rec.phonenumber || '',
+              photo_url: rec.imgUrl || '',
+              submitted_at: rec.createTime ? new Date(rec.createTime).toISOString() : null,
+              status: rec.status === 1 ? 'VERIFIED' : rec.status === 0 ? 'PENDING' : 'REJECTED',
+              merchant_id: '11111111-1111-1111-1111-111111111111',
+              created_at: new Date().toISOString()
+            };
+
+            const { data: ex } = await supabase
+              .from('submission_reviews')
+              .select('id')
+              .eq('vendor_record_id', record.vendor_record_id)
+              .maybeSingle();
+
+            if (ex) {
+              await supabase.from('submission_reviews').update(record).eq('id', ex.id);
+            } else {
+              await supabase.from('submission_reviews').insert(record);
+            }
+            synced++;
+          } catch (e) {
+            errors++;
+          }
+        }
+        if (page * pageSize >= total) break;
+        page++;
+      }
+      return res.status(200).json({ success: true, synced, errors, total });
+    }
+
+    // ===== SYNC INTEGRAL (points/wallet transactions) =====
+    if (action === 'sync-integral') {
+      let page = 1, synced = 0, errors = 0, total = 0;
+      const pageSize = 100;
+      while (true) {
+        const r = await vget('/system/integral/list', { pageNum: page, pageSize });
+        if (!r.data || r.data.code !== 200) {
+          return res.status(502).json({ error: 'vendor down', detail: r.data?.msg, synced, errors });
+        }
+        if (page === 1) total = parseInt(r.data.total) || 0;
+        const rows = r.data.rows || [];
+        if (rows.length === 0) break;
+        for (const rec of rows) {
+          try {
+            const pointChange = parseFloat(rec.integralNum || 0);
+            const record = {
+              user_id: String(rec.userId || ''),
+              merchant_id: '11111111-1111-1111-1111-111111111111',
+              points: pointChange,
+              total_weight: 0,
+              waste_type: rec.remark || (rec.integralIndex === '1' ? 'Points Earned' : 'Points Used'),
+              created_at: rec.createTime ? new Date(rec.createTime).toISOString() : new Date().toISOString()
+            };
+            // Use upsert: unique by user_id + created_at + points to avoid duplicates
+            const { data: ex } = await supabase
+              .from('wallet_transactions')
+              .select('id')
+              .eq('user_id', record.user_id)
+              .eq('created_at', record.created_at)
+              .eq('points', record.points)
+              .maybeSingle();
+            if (!ex) {
+              await supabase.from('wallet_transactions').insert(record);
+            }
+            synced++;
+          } catch (e) {
+            errors++;
+          }
+        }
+        if (page * pageSize >= total) break;
+        page++;
+      }
+      return res.status(200).json({ success: true, synced, errors, total });
+    }
+
     return res.status(400).json({ error: 'unknown action: ' + action });
   } catch (e) {
     return res.status(500).json({ error: e.message });

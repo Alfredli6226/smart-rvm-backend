@@ -1,6 +1,5 @@
 import { ref } from 'vue';
-import { supabase } from '../services/supabase';
-//import { syncUserAccount } from '../services/autogcm';
+import { proxy, proxySelect, proxyInsert, proxyUpdate, proxyDelete } from '../services/supabaseProxy';
 import { WithdrawalStatus, type Withdrawal } from '../types';
 import { useAuthStore } from '../stores/auth';
 
@@ -9,6 +8,7 @@ interface WithdrawalWithBundle extends Withdrawal {
   bundled_ids?: string[];
   sub_withdrawals?: any[];
   is_bundled?: boolean;
+  merchant_name?: string;
 }
 
 interface BalanceCheckResult {
@@ -21,97 +21,123 @@ interface BalanceCheckResult {
 const syncConfirm = ref({ isOpen: false, title: '', message: '' });
 const syncStatus = ref<{
     isOpen: boolean;
-    type: 'success' | 'error'; // <--- This fixes the TS Error
+    type: 'success' | 'error';
     title: string;
     message: string;
-  }>({ 
-    isOpen: false, 
-    type: 'success', 
-    title: '', 
-    message: '' 
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: ''
   });
 
 export function useWithdrawals() {
   const withdrawals = ref<WithdrawalWithBundle[]>([]);
   const loading = ref(false);
-  
+
   // Balance Check State
   const checkingBalanceId = ref<string | null>(null);
   const balanceResult = ref<BalanceCheckResult | null>(null);
 
-  // 1. Fetch Data
+  // Cache for merchant names
+  const merchantNames = ref<Record<string, string>>({});
+
+  // Fetch merchant names
+  const loadMerchantNames = async () => {
+    try {
+      const { data } = await proxy.from('merchants').select('id,name').run('select');
+      if (data) {
+        data.forEach((m: any) => {
+          merchantNames.value[m.id] = m.name;
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to load merchant names', e);
+    }
+  };
+
+  // 1. Fetch Withdrawals via Proxy
+  // Add new cash out record
+  const createWithdrawal = async (userId: string, amount: number) => {
+    const store = useAuthStore();
+    await proxyInsert('withdrawals', {
+      user_id: userId,
+      merchant_id: store.merchantId || '11111111-1111-1111-1111-111111111111',
+      amount: amount,
+      status: 'PENDING',
+    });
+    await fetchWithdrawals();
+  };
+
   const fetchWithdrawals = async () => {
     const auth = useAuthStore();
-    
-    // Wait for auth to be loaded if still loading or role not set
+
     if (auth.loading || !auth.role) {
-        console.log("Withdrawals: Waiting for auth/role to be ready... loading:", auth.loading, "role:", auth.role);
-        // Don't return - try again after a short delay
-        setTimeout(() => fetchWithdrawals(), 500);
-        return;
+      console.log("Withdrawals: Waiting for auth/role to be ready... loading:", auth.loading, "role:", auth.role);
+      setTimeout(() => fetchWithdrawals(), 500);
+      return;
     }
-    
+
     loading.value = true;
     console.log("Withdrawals: Fetching with role:", auth.role);
+
     try {
-      let query = supabase
-        .from('withdrawals')
-        .select(`
-            *,
-            users ( nickname, phone, avatar_url ),
-            merchants!merchant_id ( name ) 
-        `)
-        .order('created_at', { ascending: false });
+      // Load merchant names first
+      await loadMerchantNames();
+
+      const params: any = {
+        select: '*',
+        order: { column: 'created_at', ascending: false }
+      };
 
       // 🔥 SaaS Filter - VIEWER role can see ALL data
-      // Check VIEWER first before checking merchantId
-      if (auth.role === 'VIEWER') {
-          // No filter - see all data
-      } else if (auth.merchantId) {
-          query = query.eq('merchant_id', auth.merchantId);
+      if (auth.role !== 'VIEWER' && auth.merchantId) {
+        params.eq = { merchant_id: auth.merchantId };
       }
 
-      const { data, error } = await query;
-      console.log("Withdrawals: Raw response - data:", data?.length, "records, error:", error);
-      console.log("🔥 Raw Data from Supabase:", data);
+      const { data, error } = await proxy.from('withdrawals').select('*').order('created_at', { ascending: false }).run('select');
 
-      if (error) throw error;
-     if (!auth.merchantId && data) {
+      if (error) throw new Error(error);
+      console.log("Withdrawals: Raw response - data:", data?.length, "records");
+
+      if (!data) {
+        withdrawals.value = [];
+        return;
+      }
+
+      // Attach merchant names after fetch
+      const records: WithdrawalWithBundle[] = data.map((item: any) => ({
+        ...item,
+        merchant_name: merchantNames.value[item.merchant_id] || 'Unknown'
+      }));
+
+      if (!auth.merchantId) {
         // SUPER ADMIN: Bundle split records
         const groups = new Map<string, WithdrawalWithBundle>();
-
-        data.forEach((item: any) => {
-          // Group by User + Exact Time + Status
-          const timeKey = new Date(item.created_at).toISOString().split('.')[0]; 
+        records.forEach((item) => {
+          const timeKey = new Date(item.created_at).toISOString().split('.')[0];
           const key = `${item.user_id}_${timeKey}_${item.status}`;
 
           if (!groups.has(key)) {
-            // 👇 FIX: Explicitly cast 'item' to allow adding new properties
-            const newItem: WithdrawalWithBundle = {
+            groups.set(key, {
               ...item,
               is_bundled: false,
               total_amount: Number(item.amount),
               bundled_ids: [item.id],
               sub_withdrawals: [item]
-            };
-            groups.set(key, newItem);
+            });
           } else {
             const group = groups.get(key)!;
             group.is_bundled = true;
             group.total_amount = (group.total_amount || 0) + Number(item.amount);
             group.bundled_ids?.push(item.id);
             group.sub_withdrawals?.push(item);
-            
-            // 👇 FIX: Ensure type compatibility. 
-            // If 'amount' in your types.ts is number, cast it. If string, keeps as string.
-            // Assuming amount is string based on toFixed(2) usage:
-            group.amount = group.total_amount?.toFixed(2) as any; 
+            group.amount = Number((group.total_amount || 0).toFixed(2)) as any;
           }
         });
         withdrawals.value = Array.from(groups.values());
       } else {
-        // MERCHANTS: See raw data
-        withdrawals.value = data as WithdrawalWithBundle[];
+        withdrawals.value = records;
       }
     } catch (error) {
       console.error("Failed to load withdrawals", error);
@@ -120,35 +146,30 @@ export function useWithdrawals() {
     }
   };
 
-  // 2. Update Status
+  // 2. Update Status via Proxy
   const updateStatus = async (id: string, newStatus: WithdrawalStatus) => {
     if (!confirm(`Mark this request as ${newStatus}?`)) return;
 
     try {
-      // 👇 3. REPLACE THE UPDATE LOGIC HERE:
-      // Find bundle to update ALL sub-transactions at once
       const target = withdrawals.value.find(w => w.id === id);
       const idsToUpdate = target?.bundled_ids || [id];
 
-      const { error } = await supabase
-        .from('withdrawals')
-        .update({ status: newStatus })
-        .in('id', idsToUpdate);
+      // Batch update all IDs
+      for (const wid of idsToUpdate) {
+        await proxyUpdate('withdrawals', { status: newStatus }, { id: wid });
+      }
 
-      if (error) throw error;
-
-      // Clear balance check if it was for this item
       if (balanceResult.value?.id === id) {
         balanceResult.value = null;
       }
-      await fetchWithdrawals(); // Refresh list
+      await fetchWithdrawals();
     } catch (error) {
       alert("Failed to update status");
       console.error(error);
     }
   };
 
-  // 3. Hybrid Balance Check
+  // 3. Hybrid Balance Check via Proxy
   const checkBalance = async (withdrawal: WithdrawalWithBundle) => {
     const auth = useAuthStore();
     const userId = withdrawal.user_id;
@@ -157,44 +178,49 @@ export function useWithdrawals() {
     balanceResult.value = null;
 
     try {
-      // 1. Define the scope (Specific Merchant vs Global)
       const targetMerchantId = auth.merchantId || withdrawal.merchant_id;
 
-      // 2. Fetch Total Earnings from THIS Merchant (Source of Truth)
-      // We look at submission_reviews to see how much recycling they did here.
-      let earningsQuery = supabase
-        .from('submission_reviews')
-        .select('machine_given_points')
-        .eq('user_id', userId)
-        .neq('status', 'REJECTED'); // Valid recycles only
-
+      // Fetch total earnings from submission_reviews
+      const earningsParams: any = {
+        select: 'calculated_value',
+        neq: { status: 'REJECTED' },
+        eq: { user_id: userId }
+      };
       if (targetMerchantId) {
-        earningsQuery = earningsQuery.eq('merchant_id', targetMerchantId);
+        earningsParams.eq = { ...earningsParams.eq, merchant_id: targetMerchantId };
       }
 
-      const { data: earningsData } = await earningsQuery;
-      const totalEarned = (earningsData || []).reduce((sum, r) => sum + Number(r.machine_given_points || 0), 0);
+      const { data: earningsData } = await proxy.from('submission_reviews')
+        .select('calculated_value')
+        .eq('user_id', userId)
+        .neq('status', 'REJECTED')
+        .run('select');
 
-      // 3. Fetch Total Withdrawals from THIS Merchant
-      let withdrawalsQuery = supabase
-        .from('withdrawals')
+      const totalEarned = (earningsData || []).reduce((sum: number, r: any) => sum + Number(r.calculated_value || 0), 0);
+
+      // Fetch total withdrawals
+      const withdrawalsParams: any = {
+        select: 'amount',
+        neq: { status: 'REJECTED' },
+        eq: { user_id: userId }
+      };
+      if (targetMerchantId) {
+        withdrawalsParams.eq = { ...withdrawalsParams.eq, merchant_id: targetMerchantId };
+      }
+
+      const { data: withdrawalsData } = await proxy.from('withdrawals')
         .select('amount')
+        .neq('status', 'REJECTED')
         .eq('user_id', userId)
-        .neq('status', 'REJECTED'); // Valid withdrawals only
+        .run('select');
 
-      if (targetMerchantId) {
-        withdrawalsQuery = withdrawalsQuery.eq('merchant_id', targetMerchantId);
-      }
+      const totalWithdrawn = (withdrawalsData || []).reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
 
-      const { data: withdrawalsData } = await withdrawalsQuery;
-      const totalWithdrawn = (withdrawalsData || []).reduce((sum, r) => sum + Number(r.amount || 0), 0);
-
-      // 4. Calculate Available Balance for THIS Merchant
       const availableBalance = totalEarned - totalWithdrawn;
 
       balanceResult.value = {
         id: withdrawal.id,
-        available: Number(availableBalance.toFixed(2)), 
+        available: Number(availableBalance.toFixed(2)),
         lifetime: Number(totalEarned.toFixed(2)),
         spent: Number(totalWithdrawn.toFixed(2))
       };
@@ -207,7 +233,7 @@ export function useWithdrawals() {
     }
   };
 
- // 4. Verify Live Balance (Call Backend)
+  // 4. Verify Live Balance
   const verifyLiveBalance = async (userId: string, phone: string) => {
     try {
         const response = await fetch('/api/sync-balance', {
@@ -222,16 +248,14 @@ export function useWithdrawals() {
     }
   };
 
-  // 5. Batch Sync (The Button Logic)
+  // 5. Batch Sync
   const isBatchSyncing = ref(false);
-  
-  // 5. GLOBAL AUDIT: Step 1 - Prepare (Show Modal)
+
   const prepareSync = async () => {
-    // Get total count for the modal message
-    const { count, error } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .not('phone', 'is', null);
+    const { data, error } = await proxy.from('users')
+      .select('id')
+      .neq('phone', null)
+      .run('select');
 
     if (error) {
         syncStatus.value = { isOpen: true, type: 'error', title: 'Error', message: 'Database connection failed.' };
@@ -241,14 +265,13 @@ export function useWithdrawals() {
     syncConfirm.value = {
         isOpen: true,
         title: 'Start Global Audit?',
-        message: `This will scan ALL ${count || 0} registered users for external spending on AutoGCM machines.\n\nThis process may take a minute.`
+        message: `This will scan ALL ${(data || []).length || 0} registered users for external spending on AutoGCM machines.\n\nThis process may take a minute.`
     };
   };
 
-  // 6. GLOBAL AUDIT: Step 2 - Execute (Run Logic)
   const executeSync = async () => {
     isBatchSyncing.value = true;
-    
+
     let updates = 0;
     let verified = 0;
     let processedCount = 0;
@@ -256,35 +279,34 @@ export function useWithdrawals() {
     try {
       console.log("🚀 Starting Bulk Audit...");
 
-      const { data: allUsers } = await supabase
-        .from('users')
-        .select('userId:id, phone, nickname') // Alias id to userId
-        .not('phone', 'is', null);
+      const { data: allUsers, error } = await proxy.from('users')
+        .select('id,phone')
+        .neq('phone', null)
+        .run('select');
 
-      if (!allUsers) throw new Error("No users found");
+      if (error || !allUsers) throw new Error("No users found");
 
-      const totalUsers = allUsers.length;
-      
-      // === NEW: BATCHING LOGIC ===
-      const BATCH_SIZE = 10; // Process 10 users at once
-      
+      // Map to the format expected by the batch API
+      const usersForApi = allUsers.map((u: any) => ({ userId: u.id, phone: u.phone }));
+      const totalUsers = usersForApi.length;
+
+      // BATCHING LOGIC
+      const BATCH_SIZE = 10;
+
       for (let i = 0; i < totalUsers; i += BATCH_SIZE) {
-          const batch = allUsers.slice(i, i + BATCH_SIZE);
-          
-          // Update Modal Message
+          const batch = usersForApi.slice(i, i + BATCH_SIZE);
+
           syncConfirm.value.message = `Processing Batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(totalUsers/BATCH_SIZE)}...\n(${processedCount}/${totalUsers} users checked)`;
-          
+
           try {
-              // Call the new BULK API
               const response = await fetch('/api/batch-sync-balance', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ users: batch })
               });
-              
+
               const { results } = await response.json();
 
-              // Tally results
               if (results) {
                   results.forEach((r: any) => {
                       if (r.status === 'MATCHED') verified++;
@@ -296,12 +318,10 @@ export function useWithdrawals() {
               }
 
               processedCount += batch.length;
-
           } catch (e) {
               console.error("Batch failed", e);
           }
       }
-
     } catch(e) {
        console.error("Audit Critical Failure:", e);
        syncConfirm.value.isOpen = false;
@@ -309,43 +329,43 @@ export function useWithdrawals() {
        isBatchSyncing.value = false;
        return;
     }
-    
-    console.log("🏁 Audit Complete."); // Final Log
 
-    // Cleanup
-    await fetchWithdrawals(); 
+    console.log("🏁 Audit Complete.");
+
+    await fetchWithdrawals();
     isBatchSyncing.value = false;
-    syncConfirm.value.isOpen = false; 
+    syncConfirm.value.isOpen = false;
 
     if (updates > 0) {
-        syncStatus.value = { 
-            isOpen: true, 
-            type: 'success', 
-            title: 'Audit Complete', 
-            message: `⚠️ ${updates} accounts updated/adjusted.\n✅ ${verified} accounts verified.` 
+        syncStatus.value = {
+            isOpen: true,
+            type: 'success',
+            title: 'Audit Complete',
+            message: `⚠️ ${updates} accounts updated/adjusted.\n✅ ${verified} accounts verified.`
         };
     } else {
-        syncStatus.value = { 
-            isOpen: true, 
-            type: 'success', 
-            title: 'Perfectly Synced', 
-            message: `✅ All ${verified} users match AutoGCM records.` 
+        syncStatus.value = {
+            isOpen: true,
+            type: 'success',
+            title: 'Perfectly Synced',
+            message: `✅ All ${verified} users match AutoGCM records.`
         };
     }
   };
-  
+
   return {
     withdrawals,
     loading,
     checkingBalanceId,
     balanceResult,
+    createWithdrawal,
     fetchWithdrawals,
     updateStatus,
     checkBalance,
     verifyLiveBalance,
-    prepareSync, 
+    prepareSync,
     executeSync,
-    syncConfirm, 
+    syncConfirm,
     syncStatus,
     isBatchSyncing
   };

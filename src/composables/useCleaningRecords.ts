@@ -1,6 +1,6 @@
 // src/composables/useCleaningRecords.ts
 import { ref } from 'vue';
-import { supabase } from '../services/supabase';
+import { proxy, proxyUpdate } from '../services/supabaseProxy';
 import { useAuthStore } from '../stores/auth';
 
 export interface CleaningRecord {
@@ -31,8 +31,8 @@ export function useCleaningRecords() {
         
         loading.value = true;
         try {
-            console.log("CleaningRecords: Fetching data from Supabase...");
-            const { data, error } = await supabase
+            console.log("CleaningRecords: Fetching data from proxy...");
+            const { data, error } = await proxy
                 .from('cleaning_records')
                 .select('*')
                 .order('cleaned_at', { ascending: false });
@@ -54,19 +54,13 @@ export function useCleaningRecords() {
 
     // 2. Approve
     const approveCleaning = async (id: string) => {
-        const { error } = await supabase
-            .from('cleaning_records')
-            .update({ status: 'VERIFIED' })
-            .eq('id', id);
+        const { error } = await proxyUpdate('cleaning_records', { status: 'VERIFIED' }, { id });
         if (!error) await fetchCleaningLogs();
     };
 
     // 3. Reject
     const rejectCleaning = async (id: string, reason: string) => {
-        const { error } = await supabase
-            .from('cleaning_records')
-            .update({ status: 'REJECTED', admin_note: reason })
-            .eq('id', id);
+        const { error } = await proxyUpdate('cleaning_records', { status: 'REJECTED', admin_note: reason }, { id });
         if (!error) await fetchCleaningLogs();
     };
 

@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue';
 import { useRoute, RouterLink } from 'vue-router';
 import { useUserProfile } from '../composables/useUserProfile'; 
-import { supabase } from '../services/supabase';
+import { proxyUpdate } from '../services/supabaseProxy';
 import { RefreshCw, ArrowLeft, CreditCard, Hash, Mail, AlertTriangle, Ban, CheckCircle, Wallet, Scale, Edit2 } from 'lucide-vue-next';
 
 const route = useRoute();
@@ -52,8 +52,8 @@ const updateUserStatus = async () => {
     if (!user.value || isUpdatingStatus.value) return;
     isUpdatingStatus.value = true;
     try {
-        const { error } = await supabase.from('users').update({ status: newStatus.value, updated_at: new Date().toISOString() }).eq('id', user.value.id);
-        if (error) throw error;
+        const result = await proxyUpdate('users', { status: newStatus.value, updated_at: new Date().toISOString() }, { id: user.value.id });
+        if (result.error) throw new Error(result.error);
         if (user.value) user.value.status = newStatus.value;
         showStatusModal.value = false;
     } catch (err: any) { console.error('Status update error:', err); } 
@@ -67,11 +67,13 @@ const handleAdjust = async () => {
     try {
         if (adjustType.value === 'points') {
             const newPoints = (user.value.lifetime_integral || 0) + adjustAmount.value;
-            await supabase.from('users').update({ lifetime_integral: newPoints, updated_at: new Date().toISOString() }).eq('id', user.value.id);
+            const result = await proxyUpdate('users', { lifetime_integral: newPoints, updated_at: new Date().toISOString() }, { id: user.value.id });
+            if (result.error) throw new Error(result.error);
             user.value.lifetime_integral = newPoints;
         } else {
             const newWeight = (user.value.total_weight || 0) + adjustAmount.value;
-            await supabase.from('users').update({ total_weight: newWeight, updated_at: new Date().toISOString() }).eq('id', user.value.id);
+            const result = await proxyUpdate('users', { total_weight: newWeight, updated_at: new Date().toISOString() }, { id: user.value.id });
+            if (result.error) throw new Error(result.error);
             user.value.total_weight = newWeight;
         }
         showAdjustModal.value = false;
@@ -89,8 +91,8 @@ const handleProfileSave = async () => {
     if (!user.value || isSubmittingProfile.value) return;
     isSubmittingProfile.value = true;
     try {
-        const { error } = await supabase.from('users').update({ ...editProfile.value, updated_at: new Date().toISOString() }).eq('id', user.value.id);
-        if (error) throw error;
+        const result = await proxyUpdate('users', { ...editProfile.value, updated_at: new Date().toISOString() }, { id: user.value.id });
+        if (result.error) throw new Error(result.error);
         Object.assign(user.value, editProfile.value);
         showEditProfile.value = false;
     } catch (err: any) { console.error('Profile update error:', err); }

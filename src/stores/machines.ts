@@ -197,7 +197,12 @@ export const useMachineStore = defineStore('machines', () => {
         let statusText = "Offline";
         const vendorSnapshot = statusSnapshot[String(dbMachine.device_no)] || null;
         const vendorState = normalizeMachineStatus(vendorSnapshot);
-        let isOnline = vendorState.isOnline;
+        // Use DB is_manual_offline (synced from vendor device list) as primary online source
+        // Fall back to vendorState if DB doesn't have data
+        let isOnline = !dbMachine.is_manual_offline;
+        if (dbMachine.is_manual_offline === null || dbMachine.is_manual_offline === undefined) {
+          isOnline = vendorState.isOnline;
+        }
         
         try {
              apiRes = await getMachineConfig(dbMachine.device_no);

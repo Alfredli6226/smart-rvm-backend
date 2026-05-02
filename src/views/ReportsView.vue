@@ -560,7 +560,7 @@ watch(activeTab, (newTab) => {
             </h3>
           </div>
           
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto -mx-3 sm:mx-0">
             <table class="w-full">
               <thead class="bg-gray-50">
                 <tr>
@@ -648,7 +648,7 @@ watch(activeTab, (newTab) => {
             <p class="text-sm text-gray-500 mt-1">Sorted by most recent maintenance date</p>
           </div>
           
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto -mx-3 sm:mx-0">
             <table class="w-full">
               <thead class="bg-gray-50">
                 <tr>
@@ -743,7 +743,7 @@ watch(activeTab, (newTab) => {
             <p class="text-sm text-gray-500 mt-1">Showing individual collection events with collector and item details</p>
           </div>
           
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto -mx-3 sm:mx-0">
             <table class="w-full">
               <thead class="bg-gray-50">
                 <tr>
@@ -885,7 +885,7 @@ watch(activeTab, (newTab) => {
             </div>
           </div>
 
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto -mx-3 sm:mx-0">
             <table class="w-full">
               <thead class="bg-gray-50">
                 <tr>

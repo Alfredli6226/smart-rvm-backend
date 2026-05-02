@@ -90,7 +90,7 @@ export function useSubmissionReviews() {
         try {
             let query = supabase
                 .from('submission_reviews')
-                .select(`*, users(nickname, avatar_url, phone)`)
+                .select(`*`)
                 .order('submitted_at', { ascending: false });
 
             // VIEWER role can see ALL data, others get filtered by merchant

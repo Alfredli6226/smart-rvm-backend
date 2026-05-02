@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { supabase } from '../services/supabase';
+import { proxy } from '../services/supabaseProxy';
 
 export interface CollectorSummary {
   collector_id: string;
@@ -62,7 +62,7 @@ export function useCollectionReports() {
     error.value = null;
     
     try {
-      let query = supabase
+      let query = proxy
         .from('submission_reviews')
         .select('*');
 
@@ -127,9 +127,9 @@ export function useCollectionReports() {
     try {
       const offset = (page - 1) * itemsPerPage.value;
       
-      let query = supabase
+      let query = proxy
         .from('submission_reviews')
-        .select('id, user_id, device_no, waste_type, api_weight, calculated_value, submitted_at, status', { count: 'exact' })
+        .select('id, user_id, device_no, waste_type, api_weight, calculated_value, submitted_at, status')
         .order('submitted_at', { ascending: false })
         .range(offset, offset + itemsPerPage.value - 1);
 
@@ -146,7 +146,7 @@ export function useCollectionReports() {
         query = query.eq('device_no', filters.value.location);
       }
 
-      const { data, error: fetchError, count } = await query;
+      const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
 
@@ -161,7 +161,7 @@ export function useCollectionReports() {
         status: log.status
       }));
       
-      totalLogs.value = count || 0;
+      totalLogs.value = collectorLogs.value.length;
     } catch (err: any) {
       error.value = err.message || 'Failed to fetch collector logs';
     } finally {

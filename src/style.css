@@ -19,4 +19,62 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Mobile: ensure tables scroll horizontally */
+@media (max-width: 768px) {
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Hide sidebar on very small screens by default */
+  .lg\:ml-64 {
+    margin-left: 0 !important;
+  }
+}
+
+/* 🟢 Mobile-responsive dashboards */
+@media (max-width: 640px) {
+  /* Prevent horizontal scroll on any container */
+  .overflow-x-auto table {
+    min-width: 500px;
+  }
+
+  /* Make stat cards stack cleanly */
+  .stats-grid-mobile {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  /* Better touch targets */
+  .touch-friendly button,
+  .touch-friendly a,
+  .touch-friendly [role="button"] {
+    min-height: 44px;
+  }
+
+  /* Card refinements for small screens */
+  .card-mobile {
+    padding: 0.75rem !important;
+  }
+
+  /* Hide secondary buttons on very small screens */
+  .action-buttons-mobile-hide {
+    display: none !important;
+  }
+
+  /* Full-width buttons on mobile */
+  .btn-mobile-full {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .stats-grid-mobile {
+    grid-template-columns: 1fr;
+  }
 }

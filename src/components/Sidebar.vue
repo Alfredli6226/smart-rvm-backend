@@ -3,7 +3,10 @@ import { RouterLink, useRoute } from 'vue-router';
 import { computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { useNotifications, notificationCount, issueCount } from '../composables/useNotifications';
-import { LayoutDashboard, Wallet, Users, MonitorSmartphone, LogOut, Shield, ClipboardCheck, Trash2, Settings, Globe, AlertCircle, Bell, FileText, Megaphone, ShieldCheck } from 'lucide-vue-next';
+import { LayoutDashboard, Wallet, Users, MonitorSmartphone, LogOut, Shield, ClipboardCheck, Trash2, Settings, Globe, AlertCircle, Bell, FileText, Megaphone, ShieldCheck, MessageCircle, Percent, Truck, X, Trophy, ShoppingBag } from 'lucide-vue-next';
+
+defineProps<{ mobileOpen?: boolean }>();
+const emit = defineEmits(['close']);
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -29,7 +32,17 @@ const settingsPath = computed(() => {
 </script>
 
 <template>
-  <aside class="w-64 bg-white border-r border-gray-200 min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-10">
+  <!-- Mobile backdrop -->
+  <div v-if="mobileOpen" class="fixed inset-0 bg-black/50 z-20 lg:hidden" @click="emit('close')"></div>
+  
+  <aside :class="[
+    'w-64 bg-white border-r border-gray-200 min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-30 transition-transform duration-300 lg:translate-x-0 lg:z-10',
+    mobileOpen ? 'translate-x-0' : '-translate-x-full'
+  ]">
+    <!-- Mobile close button -->
+    <button @click="emit('close')" class="absolute top-4 right-4 p-1 rounded-lg hover:bg-gray-100 lg:hidden">
+      <X :size="20" class="text-gray-500" />
+    </button>
     <div class="h-16 flex items-center px-8 border-b border-gray-100">
       <div class="text-xl font-bold text-blue-600 flex items-center gap-2">
         <MonitorSmartphone />
@@ -51,7 +64,7 @@ const settingsPath = computed(() => {
         :class="isActive('/submissions') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
       >
         <ClipboardCheck :size="20" />
-        Submissions
+        Drop-offs
       </RouterLink>
 
       <RouterLink to="/withdrawals" 
@@ -59,7 +72,7 @@ const settingsPath = computed(() => {
         :class="isActive('/withdrawals') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
       >
         <Wallet :size="20" />
-        Withdrawals
+        Cash Out
       </RouterLink>
 
       <RouterLink to="/users" 
@@ -78,6 +91,14 @@ const settingsPath = computed(() => {
         Machines
       </RouterLink>
 
+      <RouterLink to="/orders" 
+        class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+        :class="isActive('/orders') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+      >
+        <ShoppingBag :size="20" />
+        MyGreenShop Orders
+      </RouterLink>
+
       <RouterLink to="/cleaning-logs" 
         class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
         :class="isActive('/cleaning-logs') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
@@ -92,6 +113,22 @@ const settingsPath = computed(() => {
       >
         <FileText :size="20" />
         Reports
+      </RouterLink>
+
+      <RouterLink to="/bulk-collection" 
+        class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+        :class="isActive('/bulk-collection') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+      >
+        <Truck :size="20" />
+        Bulk Collection
+      </RouterLink>
+
+      <RouterLink to="/customer-service" 
+        class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+        :class="isActive('/customer-service') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+      >
+        <MessageCircle :size="20" />
+        Customer Support Desk
       </RouterLink>
 
       <!-- Notifications - visible to Agents and Collectors (not SUPER_ADMIN) -->
@@ -119,17 +156,33 @@ const settingsPath = computed(() => {
         <span>AI Verification</span>
       </RouterLink>
 
-      <RouterLink to="/admins" 
+      <RouterLink to="/admin-leaderboard" 
         class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
-        :class="isActive('/admins') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+        :class="isActive('/admin-leaderboard') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+      >
+        <Trophy :size="20" class="text-amber-500" />
+        <span>Leaderboard &amp; Audit</span>
+      </RouterLink>
+
+      <RouterLink to="/agencies" 
+        class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+        :class="isActive('/agencies') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
         >
         <Shield :size="20" /> 
-        Admin Access
+        Agencies
       </RouterLink>
 
       <div v-if="auth.role === 'SUPER_ADMIN' && !auth.merchantId" class="pt-6 mt-2 border-t border-gray-100">
         <p class="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Platform Owner</p>
         
+        <RouterLink to="/agencies/commission" 
+          class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+          :class="isActive('/agencies/commission') ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+        >
+          <Percent :size="20" />
+          Commission Settings
+        </RouterLink>
+
         <RouterLink to="/super-admin/merchants" 
           class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors"
           :class="isActive('/super-admin/merchants') ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"

@@ -5,9 +5,11 @@ import { watch } from 'vue';
 import { useTabsStore } from '../stores/tabs';
 import { useAuthStore } from '../stores/auth';
 import { useMachineStore } from '../stores/machines';
-import { RefreshCw, HelpCircle, Monitor, Info } from 'lucide-vue-next'; 
+import { RefreshCw, HelpCircle, Monitor, Info, Menu } from 'lucide-vue-next'; 
 import Sidebar from './Sidebar.vue';
 import TabsBar from './TabsBar.vue';
+
+const mobileMenuOpen = ref(false);
 
 const route = useRoute();
 const tabsStore = useTabsStore();
@@ -94,15 +96,20 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-gray-50 font-sans overflow-hidden">
+  <div class="flex min-h-screen bg-gray-50 font-sans overflow-x-hidden">
     
     <div class="fixed inset-y-0 left-0 z-30 w-64 bg-white transition-all duration-300">
-      <Sidebar />
+      <Sidebar :mobileOpen="mobileMenuOpen" @close="mobileMenuOpen = false" />
     </div>
 
-    <main class="flex-1 flex flex-col h-screen ml-64 relative bg-gray-50">
+    <!-- Mobile menu button -->
+    <button @click="mobileMenuOpen = true" class="fixed top-4 left-4 z-20 p-2 rounded-xl bg-white shadow-md border border-gray-200 lg:hidden active:scale-95">
+      <Menu :size="22" class="text-gray-700" />
+    </button>
+    
+    <main class="flex-1 flex flex-col min-h-screen lg:ml-64 relative bg-gray-50">
       
-      <header class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-8 shadow-sm shrink-0 z-20">
+      <header class="bg-white border-b border-gray-200 min-h-[3.5rem] flex items-center justify-between px-4 sm:px-14 lg:px-8 shadow-sm shrink-0 z-20">
         
         <div class="flex items-center gap-4">
           <h2 class="text-xl font-semibold text-gray-800 tracking-tight">
@@ -134,7 +141,7 @@ onMounted(async () => {
 
           <div class="h-6 w-px bg-gray-200 mx-2"></div>
 
-          <div class="text-right hidden sm:block">
+          <div class="text-right hidden md:block">
             <div class="text-sm font-medium text-gray-900">
               {{ auth.user?.email || 'Administrator' }}
             </div>
@@ -174,7 +181,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="flex-1 overflow-y-auto p-6 scroll-smooth">
+      <div class="flex-1 overflow-y-auto p-3 sm:p-6 scroll-smooth">
         <div class="max-w-7xl mx-auto pb-10">
           <router-view v-slot="{ Component }">
             <keep-alive>

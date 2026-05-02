@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { supabase } from '../services/supabase';
+import { proxy } from '../services/supabaseProxy';
 
 export interface FinancialSummary {
   total_revenue: number;
@@ -56,7 +56,7 @@ export function useFinancialReports() {
       console.log('[FinancialReports] Fetching revenue data...');
       
       // 1. Calculate Total Collection Revenue
-      let revenueQuery = supabase
+      let revenueQuery = proxy
         .from('submission_reviews')
         .select('calculated_value, submitted_at');
 
@@ -80,7 +80,7 @@ export function useFinancialReports() {
       console.log('[FinancialReports] Total revenue:', totalCollectionRevenue);
 
       // 2. Calculate Total Maintenance Costs
-      let maintenanceQuery = supabase
+      let maintenanceQuery = proxy
         .from('cleaning_records')
         .select('bag_weight_collected, cleaned_at');
 
@@ -98,7 +98,7 @@ export function useFinancialReports() {
       const totalMaintenanceCosts = (maintenanceData || []).reduce((sum, m) => sum + (Number(m.bag_weight_collected) || 0), 0);
 
       // 3. Calculate Total Expenses
-      let expensesQuery = supabase
+      let expensesQuery = proxy
         .from('withdrawals')
         .select('amount, created_at');
 

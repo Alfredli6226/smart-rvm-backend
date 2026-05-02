@@ -26,6 +26,26 @@ async function vGet(path, params = {}) {
   catch { return { ok: false, raw: text }; }
 }
 
+// ===== FETCH ALL INTEGRAL RECORDS (paginated, parallel) =====
+async function fetchAllIntegralRecords() {
+  const first = await vGet('/system/integral/list', { page: 1, pageSize: 50, userType: 11 });
+  if (!first.ok || !first.data) return [];
+  const total = parseInt(first.data.total || '0');
+  const allRows = [...(first.data.rows || [])];
+  const totalPages = Math.ceil(total / 50);
+  const promises = [];
+  for (let p = 2; p <= totalPages && p <= 70; p++) {
+    promises.push(
+      vGet('/system/integral/list', { page: p, pageSize: 50, userType: 11 })
+        .then(r => r.ok && r.data ? (r.data.rows || []) : [])
+        .catch(() => [])
+    );
+  }
+  const results = await Promise.all(promises);
+  results.forEach(r => allRows.push(...r));
+  return allRows;
+}
+
 // ===== SYNC USERS (page through all) =====
 async function syncUsers(supabase) {
   let totalSynced = 0, totalErrors = 0, pages = 0;
@@ -142,10 +162,70 @@ export default async function handler(req, res) {
         const r = await syncMachines(supabase);
         return res.status(200).json({ success: true, ...r });
       }
+      case 'sync-integral': {
+        const r = await fetchAllIntegralRecords();
+        console.log(`Fetched ${r.length} records`);
+        if (r.length === 0) return res.status(200).json({ synced: 0, error: 'no vendor data' });
+        
+        let inserted = 0;
+        const batchSize = 100;
+        const transformed = r.map(rec => ({
+          user_id: rec.userId,
+          device_no: rec.deviceNo || '',
+          waste_type: 'Mixed',
+          total_weight: (parseFloat(rec.integralNum || 0) / 0.2).toFixed(2),
+          points: parseFloat(rec.integralNum || 0),
+          status: 'COMPLETED',
+          submitted_at: rec.recordedTime || rec.createTime,
+          payload: { raw: rec }
+        }));
+        
+        for (let i = 0; i < transformed.length; i += batchSize) {
+          const batch = transformed.slice(i, i + batchSize);
+          try {
+            const { error } = await supabase.from('rubbish_records').upsert(batch, { onConflict: 'id', ignoreDuplicates: true });
+            if (!error) inserted += batch.length;
+          } catch(e) {
+            for (const row of batch) {
+              try { await supabase.from('rubbish_records').insert(row); inserted++; } catch {}
+            }
+          }
+        }
+        
+        return res.status(200).json({ success: true, vendor_records: r.length, rubbish_records_inserted: inserted });
+      }
       case 'full-sync': {
         const m = await syncMachines(supabase);
         const u = await syncUsers(supabase);
         return res.status(200).json({ success: true, machines: m, users: u });
+      }
+      case 'sync-submissions': {
+        const r = await fetchAllIntegralRecords();
+        if (r.length === 0) return res.status(200).json({ synced: 0 });
+        let inserted = 0;
+        const batchSize = 100;
+        for (let i = 0; i < r.length; i += batchSize) {
+          const batch = r.slice(i, i + batchSize).map(rec => ({
+            user_id: rec.userId,
+            device_no: rec.deviceNo || '',
+            waste_type: 'Mixed',
+            api_weight: (parseFloat(rec.integralNum || 0) / 0.2).toFixed(2),
+            total_weight: (parseFloat(rec.integralNum || 0) / 0.2).toFixed(2),
+            points_awarded: parseFloat(rec.integralNum || 0),
+            status: 'VERIFIED',
+            vendor_record_id: String(rec.id || rec.orderId || ''),
+            submitted_at: rec.recordedTime || rec.createTime
+          }));
+          try {
+            const { error } = await supabase.from('submission_reviews').upsert(batch, { onConflict: 'id', ignoreDuplicates: true });
+            if (!error) inserted += batch.length;
+          } catch {
+            for (const row of batch) {
+              try { await supabase.from('submission_reviews').insert(row); inserted++; } catch {}
+            }
+          }
+        }
+        return res.status(200).json({ success: true, vendor_records: r.length, submission_reviews_inserted: inserted });
       }
       case 'status': {
         const t = await vGet('/system/device/list');

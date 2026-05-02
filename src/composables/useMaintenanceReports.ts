@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { supabase } from '../services/supabase';
+import { proxy, proxyUpdate } from '../services/supabaseProxy';
 
 export interface MaintenanceRecord {
   id: string;
@@ -47,7 +47,7 @@ export function useMaintenanceReports() {
 
   const fetchSummary = async () => {
     try {
-      const { data: allRecords, error: fetchError } = await supabase
+      const { data: allRecords, error: fetchError } = await proxy
         .from('cleaning_records')
         .select('status');
 
@@ -76,9 +76,9 @@ export function useMaintenanceReports() {
     try {
       const offset = (page - 1) * itemsPerPage.value;
       
-      let query = supabase
+      let query = proxy
         .from('cleaning_records')
-        .select('*', { count: 'exact' })
+        .select('*')
         .order('cleaned_at', { ascending: false })
         .range(offset, offset + itemsPerPage.value - 1);
 
@@ -95,7 +95,7 @@ export function useMaintenanceReports() {
         query = query.eq('device_no', filters.value.machineId);
       }
 
-      const { data, error: fetchError, count } = await query;
+      const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
 
@@ -111,7 +111,7 @@ export function useMaintenanceReports() {
         notes: r.admin_note
       }));
       
-      totalRecords.value = count || 0;
+      totalRecords.value = records.value.length;
       
       // Also fetch summary
       await fetchSummary();
@@ -129,10 +129,7 @@ export function useMaintenanceReports() {
 
   const updateStatus = async (id: string, status: string, note?: string) => {
     try {
-      const { error: updateError } = await supabase
-        .from('cleaning_records')
-        .update({ status, admin_note: note })
-        .eq('id', id);
+      const { error: updateError } = await proxyUpdate('cleaning_records', { status, admin_note: note }, { id });
 
       if (updateError) throw updateError;
       

@@ -43,7 +43,7 @@ onMounted(applyFilters);
     </div>
 
     <div class="rounded-xl bg-white shadow-sm border overflow-hidden">
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto -mx-3 sm:mx-0">
         <table class="min-w-full text-sm">
           <thead class="bg-gray-50 text-gray-500"><tr><th class="px-4 py-3 text-left">Customer</th><th class="px-4 py-3 text-left">Category</th><th class="px-4 py-3 text-left">Priority</th><th class="px-4 py-3 text-left">Lead</th><th class="px-4 py-3 text-left">AI Summary</th><th class="px-4 py-3 text-left">Channel</th><th class="px-4 py-3 text-left">Assigned</th><th class="px-4 py-3 text-left"></th></tr></thead>
           <tbody>

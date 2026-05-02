@@ -70,7 +70,7 @@ const getStatusBadge = (code: number) => {
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
         <table class="w-full text-left">
           <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-semibold tracking-wider">
             <tr>

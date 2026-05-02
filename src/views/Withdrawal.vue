@@ -7,7 +7,7 @@ import SimpleConfirmModal from '../components/SimpleConfirmModal.vue';
 import StatusModal from '../components/StatusModal.vue';
 import { 
   CheckCircle2, XCircle, RefreshCcw,  ChevronLeft, ChevronRight,
-  Clock, CheckSquare, Download
+  Clock, CheckSquare, Download, PlusCircle
 } from 'lucide-vue-next';
 import { Eye } from 'lucide-vue-next';
 import type { Withdrawal } from '../types';
@@ -18,6 +18,7 @@ import ExportSummaryModal from '../components/ExportSummaryModal.vue';
 const { 
   withdrawals, 
   loading, 
+  createWithdrawal,
   fetchWithdrawals, 
   updateStatus,
   prepareSync, 
@@ -26,6 +27,30 @@ const {
   syncStatus,
   isBatchSyncing
 } = useWithdrawals();
+
+// Record Cash Out modal
+const showRecordModal = ref(false);
+const recordUserId = ref('');
+const recordAmount = ref(0);
+const recordSubmitting = ref(false);
+
+const handleRecordCashOut = async () => {
+  if (!recordUserId.value || recordAmount.value <= 0) {
+    alert('Please enter user ID and amount');
+    return;
+  }
+  recordSubmitting.value = true;
+  try {
+    await createWithdrawal(recordUserId.value, recordAmount.value);
+    showRecordModal.value = false;
+    recordUserId.value = '';
+    recordAmount.value = 0;
+  } catch (err: any) {
+    alert('Failed: ' + (err.message || 'Unknown error'));
+  } finally {
+    recordSubmitting.value = false;
+  }
+};
 
 const auth = useAuthStore();
 
@@ -66,8 +91,7 @@ const filteredList = computed(() => {
     const q = searchFilters.value.search.toLowerCase();
     if (q) {
       const match = 
-        (w.users?.phone || '').toLowerCase().includes(q) ||
-        (w.users?.nickname || '').toLowerCase().includes(q) ||
+        (w.user_id || '').toLowerCase().includes(q) ||
         (w.bank_name || '').toLowerCase().includes(q) ||
         (w.account_number || '').toLowerCase().includes(q);
       
@@ -203,6 +227,14 @@ watch(() => auth.role, (newRole) => {
         </button>
 
         <button 
+          @click="showRecordModal = true"
+          class="flex items-center space-x-2 text-sm font-bold text-white bg-purple-600 border border-purple-600 px-4 py-2 rounded-lg hover:bg-purple-700 transition-all"
+        >
+          <PlusCircle :size="16" />
+          <span>Record Cash Out</span>
+        </button>
+
+        <button 
           @click="fetchWithdrawals" 
           :disabled="loading"
           class="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-4 py-2 rounded-lg shadow-sm hover:shadow transition-all disabled:opacity-50"
@@ -239,7 +271,7 @@ watch(() => auth.role, (newRole) => {
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto -mx-3 sm:mx-0">
         <table class="w-full text-left border-collapse">
           <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-semibold tracking-wider whitespace-nowrap">
             <tr>
@@ -287,16 +319,15 @@ watch(() => auth.role, (newRole) => {
 
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
-                  <div class="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center mr-2 overflow-hidden shrink-0">
-                    <img v-if="w.users?.avatar_url" :src="w.users.avatar_url" class="h-full w-full object-cover" />
-                    <span v-else class="text-xs">👤</span>
+                  <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center mr-2 overflow-hidden shrink-0">
+                    <span class="text-xs font-bold text-gray-500">{{ (w.user_id || '?').slice(-2) }}</span>
                   </div>
-                  <span class="font-medium text-gray-900">{{ w.users?.nickname || 'Guest' }}</span>
+                  <span class="font-medium text-gray-900">{{ w.user_id || 'Guest' }}</span>
                 </div>
               </td>
 
               <td class="px-6 py-4 whitespace-nowrap font-mono text-xs text-gray-600">
-                {{ w.users?.phone || '-' }}
+                {{ '-' }}
               </td>
 
               <td class="px-6 py-4 whitespace-nowrap text-right font-bold text-gray-900">
@@ -365,5 +396,37 @@ watch(() => auth.role, (newRole) => {
       :message="syncStatus.message"
       @close="syncStatus.isOpen = false"
     />
+
+    <!-- Record Cash Out Modal -->
+    <div v-if="showRecordModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showRecordModal = false">
+      <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl mx-4">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Record Cash Out</h3>
+        <p class="text-sm text-gray-500 mb-4">Manually record a cash-out transaction for a user.</p>
+        
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">User ID</label>
+            <input v-model="recordUserId" type="text" placeholder="e.g. 1384523"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Amount (RM)</label>
+            <input v-model.number="recordAmount" type="number" step="0.01" min="0" placeholder="0.00"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 mt-6">
+          <button @click="showRecordModal = false" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+            Cancel
+          </button>
+          <button @click="handleRecordCashOut" :disabled="recordSubmitting"
+            class="px-4 py-2 text-sm font-bold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50">
+            {{ recordSubmitting ? 'Saving...' : 'Record' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

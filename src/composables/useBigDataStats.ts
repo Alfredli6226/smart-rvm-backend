@@ -1,19 +1,18 @@
 import { ref } from 'vue';
-import { supabase } from '../services/supabase';
-import { useAuthStore } from '../stores/auth';
 import { getMachineStatusSnapshot, normalizeMachineStatus } from '../services/autogcm';
+import { proxySelect } from '../services/supabaseProxy';
+import { useAuthStore } from '../stores/auth';
 
 export function useBigDataStats() {
   const loading = ref(true);
   const statsLoading = ref(false);
-  
-  // Default to 'all' to show data immediately
-  const timeFilter = ref('all'); 
+
+  const timeFilter = ref('all');
   const dateRange = ref({ start: '', end: '' });
   const selectedMachineId = ref('');
 
   const totalUsers = ref(0);
-  const totalWeight = ref(0); 
+  const totalWeight = ref(0);
   const totalLifetimePoints = ref(0);
   const totalMachines = ref(0);
   const machineLocations = ref<any[]>([]);
@@ -25,273 +24,260 @@ export function useBigDataStats() {
     deliveryVolume: 0,
     submissions: 0,
     newUsers: 0,
-    pointsGiven: 0
+    pointsGiven: 0,
   });
-  
+
   const wasteTrends = ref<any[]>([]);
   const withdrawalTrends = ref<any[]>([]);
   const collectionLogs = ref<any[]>([]);
 
-  // --- A. INITIAL FETCH ---
-  // FIX: Add 'background' param to prevent full-page loading on refresh
+  function getStartDate(): string {
+    if (dateRange.value.start) return new Date(dateRange.value.start).toISOString();
+    const d = new Date();
+    if (timeFilter.value === 'day') d.setDate(d.getDate() - 1);
+    else if (timeFilter.value === 'week') d.setDate(d.getDate() - 7);
+    else if (timeFilter.value === 'month') d.setMonth(d.getMonth() - 1);
+    else return '';
+    return d.toISOString();
+  }
+
+  async function fetchMerchantScopedUserIds(merchantId: string): Promise<string[]> {
+    const [walletsRes, withdrawalsRes, reviewsRes] = await Promise.all([
+      proxySelect('merchant_wallets', { select: 'user_id', eq: { merchant_id: merchantId }, limit: 10000 }),
+      proxySelect('withdrawals', { select: 'user_id', eq: { merchant_id: merchantId }, limit: 10000 }),
+      proxySelect('submission_reviews', { select: 'user_id', eq: { merchant_id: merchantId }, limit: 10000 }),
+    ]);
+
+    return Array.from(new Set([
+      ...(walletsRes.data || []).map((row: any) => row.user_id).filter(Boolean),
+      ...(withdrawalsRes.data || []).map((row: any) => row.user_id).filter(Boolean),
+      ...(reviewsRes.data || []).map((row: any) => row.user_id).filter(Boolean),
+    ]));
+  }
+
   async function fetchInitialData(background = false) {
     const auth = useAuthStore();
-    
-    // Only show spinner if this is NOT a background refresh
-    if (!background) {
-      loading.value = true;
-    }
+
+    if (!background) loading.value = true;
 
     try {
-      // 1. MACHINES
-      const { data: machines } = await supabase.from('machines').select('*');
+      const merchantId = auth.merchantId || null;
+      const machineQuery: any = { limit: 100 };
+      if (merchantId) machineQuery.eq = { merchant_id: merchantId };
+
+      const { data: machines } = await proxySelect('machines', machineQuery);
       if (machines) {
         const statusSnapshot = await getMachineStatusSnapshot();
-        const results = machines.map((m) => {
-            const vendorState = normalizeMachineStatus(statusSnapshot[String(m.device_no)] || null);
-            const isOnline = vendorState.isOnline || m.is_online === true || m.isOnline === true || String(m.status).toUpperCase() === 'ONLINE';
-            return { ...m, isOnline, vendorStatus: vendorState.vendorStatus, vendorStatusText: vendorState.vendorStatusText };
+        const results = machines.map((m: any) => {
+          const vendorState = normalizeMachineStatus(statusSnapshot[String(m.device_no)] || null);
+          const isOnline = vendorState.isOnline || m.is_online === true || m.isOnline === true || String(m.status || '').toUpperCase() === 'ONLINE';
+          return { ...m, isOnline, vendorStatus: vendorState.vendorStatus, vendorStatusText: vendorState.vendorStatusText };
         });
         machineLocations.value = results;
         totalMachines.value = results.length;
-        onlineCount.value = results.filter(m => m.isOnline).length;
+        onlineCount.value = results.filter((m: any) => m.isOnline).length;
         offlineCount.value = totalMachines.value - onlineCount.value;
       }
 
-      // 2. TOTAL USERS
-      const { count: uCount } = await supabase.from('users').select('*', { count: 'exact', head: true });
-      totalUsers.value = uCount || 0;
+      if (merchantId) {
+        const [walletsRes, userIds] = await Promise.all([
+          proxySelect('merchant_wallets', {
+            select: 'user_id,total_weight,total_earnings,created_at,current_balance',
+            eq: { merchant_id: merchantId },
+            limit: 10000,
+          }),
+          fetchMerchantScopedUserIds(merchantId),
+        ]);
 
-      // 3. TOTAL WEIGHT (RPC)
-      const { data: weightSum, error: rpcError } = await supabase.rpc('get_total_weight', { merchant_uuid: auth.merchantId || null });
-      if (!rpcError && weightSum !== null) {
-        totalWeight.value = Number(weightSum);
+        const wallets = walletsRes.data || [];
+        totalWeight.value = wallets.reduce((sum: number, row: any) => sum + (Number(row.total_weight) || 0), 0);
+        totalLifetimePoints.value = wallets.reduce((sum: number, row: any) => sum + (Number(row.total_earnings) || 0), 0);
+        totalUsers.value = userIds.length;
+
+        const [recentReviewsRes, recentUsersRes] = await Promise.all([
+          proxySelect('submission_reviews', {
+            select: 'id,user_id,api_weight,calculated_value,submitted_at,created_at',
+            eq: { merchant_id: merchantId },
+            order: { column: 'submitted_at', ascending: false },
+            limit: 20,
+          }),
+          userIds.length > 0
+            ? proxySelect('users', {
+                select: 'id,nickName,user_id,phone,last_active_at,created_at',
+                in: { id: userIds },
+                limit: 10000,
+              })
+            : Promise.resolve({ data: [] }),
+        ]);
+
+        const usersById = new Map((recentUsersRes.data || []).map((u: any) => [u.id, u]));
+        recentSubmissions.value = (recentReviewsRes.data || []).map((r: any) => {
+          const user = usersById.get(r.user_id) || {};
+          return {
+            id: r.id,
+            user_name: user.nickName || user.user_id || r.user_id,
+            phone: user.phone || '',
+            api_weight: r.api_weight || 0,
+            calculated_value: r.calculated_value || 0,
+            submitted_at: r.submitted_at || r.created_at || null,
+          };
+        });
       } else {
-        // Fallback
-        let qWeight = supabase.from('submission_reviews')
-          .select('api_weight')
-          .range(0, 19999);
-        if (auth.merchantId) qWeight = qWeight.eq('merchant_id', auth.merchantId);
-        const { data: wData } = await qWeight;
-        if (wData) totalWeight.value = wData.reduce((sum, r) => sum + (Number(r.api_weight) || 0), 0);
+        const { count: uCount } = await proxySelect('users', { select: '*', count: true, head: true });
+        totalUsers.value = uCount || 0;
+
+        const { data: users } = await proxySelect('users', {
+          select: 'total_weight,total_points',
+          limit: 10000,
+        });
+        totalWeight.value = (users || []).reduce((sum: number, u: any) => sum + (Number(u.total_weight) || 0), 0);
+        totalLifetimePoints.value = (users || []).reduce((sum: number, u: any) => sum + (Number(u.total_points) || 0), 0);
+
+        const { data: recentUsers } = await proxySelect('users', {
+          select: 'nickName,user_id,phone,total_weight,total_points,last_active_at',
+          order: { column: 'last_active_at', ascending: false },
+          limit: 20,
+        });
+        recentSubmissions.value = (recentUsers || []).map((u: any) => ({
+          user_name: u.nickName || u.user_id,
+          phone: u.phone || '',
+          api_weight: u.total_weight || 0,
+          calculated_value: u.total_points || 0,
+          submitted_at: u.last_active_at || null,
+        }));
       }
-
-      // 2. Add TOTAL LIFETIME POINTS (Right after Weight)
-      const { data: pointSum, error: ptRpcError } = await supabase.rpc('get_total_points', { merchant_uuid: auth.merchantId || null });
-      if (!ptRpcError && pointSum !== null) {
-        totalLifetimePoints.value = Number(pointSum);
-      } else {
-        // Fallback: Sum calculated_value from recent history
-        let qPoints = supabase.from('submission_reviews')
-          .select('calculated_value')
-          .range(0, 19999);
-        if (auth.merchantId) qPoints = qPoints.eq('merchant_id', auth.merchantId);
-        const { data: pData } = await qPoints;
-        if (pData) totalLifetimePoints.value = pData.reduce((sum, r) => sum + (Number(r.calculated_value) || 0), 0);
-      }
-
-      // 4. LIVE FEED - VIEWER role sees ALL data
-      let qFeed = supabase.from('submission_reviews')
-        .select('*, users(nickname)')
-        .order('submitted_at', { ascending: false, nullsFirst: false }) 
-        .limit(20);
-        
-      if (auth.role !== 'VIEWER' && auth.merchantId) qFeed = qFeed.eq('merchant_id', auth.merchantId);
-      
-      const { data: feed } = await qFeed;
-      if (feed) recentSubmissions.value = feed;
-
     } catch (err) {
-      console.error("Init Error:", err);
+      console.error('Init Error:', err);
     } finally {
       await fetchFilteredStats();
       loading.value = false;
     }
   }
 
-  // --- B. FILTERED STATS FETCH ---
   async function fetchFilteredStats() {
     const auth = useAuthStore();
     statsLoading.value = true;
 
     try {
-      // ✅ 1. UPDATE "ALL TIME" TOTALS (Blue & Yellow Boxes)
-      // Logic: If machine selected, sum specific machine data (All Time). If not, use Global RPCs.
-      if (selectedMachineId.value) {
-          const { data: allTimeData } = await supabase
-            .from('submission_reviews')
-            .select('api_weight, calculated_value')
-            .eq('device_no', selectedMachineId.value);
-            
-          if (allTimeData) {
-             totalWeight.value = allTimeData.reduce((sum, r) => sum + (Number(r.api_weight) || 0), 0);
-             totalLifetimePoints.value = allTimeData.reduce((sum, r) => sum + (Number(r.calculated_value) || 0), 0);
-          }
-      } else {
-          // Revert to Global RPCs
-          const { data: weightSum } = await supabase.rpc('get_total_weight', { merchant_uuid: auth.merchantId || null });
-          if (weightSum !== null) totalWeight.value = Number(weightSum);
+      const merchantId = auth.merchantId || null;
+      const startDateStr = getStartDate();
 
-          const { data: pointSum } = await supabase.rpc('get_total_points', { merchant_uuid: auth.merchantId || null });
-          if (pointSum !== null) totalLifetimePoints.value = Number(pointSum);
-      }
+      if (merchantId) {
+        const userIds = await fetchMerchantScopedUserIds(merchantId);
+        const [walletsRes, withdrawalsRes, cleanDataRes, reviewsRes, usersRes] = await Promise.all([
+          proxySelect('merchant_wallets', {
+            select: 'user_id,total_weight,total_earnings,created_at',
+            eq: { merchant_id: merchantId },
+            limit: 10000,
+          }),
+          proxySelect('withdrawals', {
+            select: 'amount,status,created_at',
+            eq: { merchant_id: merchantId },
+            limit: 10000,
+          }),
+          proxySelect('cleaning_records', {
+            eq: { merchant_id: merchantId },
+            order: { column: 'cleaned_at', ascending: false },
+            limit: 50,
+          }),
+          proxySelect('submission_reviews', {
+            select: 'user_id,api_weight,calculated_value,created_at,submitted_at,status',
+            eq: { merchant_id: merchantId },
+            limit: 10000,
+          }),
+          userIds.length > 0
+            ? proxySelect('users', {
+                select: 'id,created_at,nickName,user_id',
+                in: { id: userIds },
+                limit: 10000,
+              })
+            : Promise.resolve({ data: [] }),
+        ]);
 
-      // 2. PREPARE DATE FILTER
-      let startDateStr = '';
-      if (dateRange.value.start) {
-        startDateStr = new Date(dateRange.value.start).toISOString();
-      } else {
-        const d = new Date();
-        if (timeFilter.value === 'day') {
-            d.setDate(d.getDate() - 1);
-            startDateStr = d.toISOString();
-        } else if (timeFilter.value === 'week') {
-            d.setDate(d.getDate() - 7);
-            startDateStr = d.toISOString();
-        } else if (timeFilter.value === 'month') {
-            d.setMonth(d.getMonth() - 1);
-            startDateStr = d.toISOString();
-        } else if (timeFilter.value === 'all') {
-            startDateStr = ''; 
+        let wallets = walletsRes.data || [];
+        let withdrawals = withdrawalsRes.data || [];
+        let reviews = reviewsRes.data || [];
+        let users = usersRes.data || [];
+
+        if (startDateStr) {
+          wallets = wallets.filter((row: any) => !row.created_at || row.created_at >= startDateStr);
+          withdrawals = withdrawals.filter((row: any) => !row.created_at || row.created_at >= startDateStr);
+          reviews = reviews.filter((row: any) => (row.submitted_at || row.created_at || '') >= startDateStr);
+          users = users.filter((row: any) => !row.created_at || row.created_at >= startDateStr);
         }
-      }
 
-      // ✅ 3. FETCH PERIOD SUMMARY (Small Boxes)
-      if (!selectedMachineId.value) {
-          // VIEWER role sees ALL data, others get filtered by merchant
-          const filterMerchantId = auth.role === 'VIEWER' ? null : (auth.merchantId || null);
-          const { data: rpcStats } = await supabase.rpc('get_filtered_stats', {
-            merchant_uuid: filterMerchantId,
-            filter_date: startDateStr || null
-          });
+        summary.value.newUsers = users.length;
+        summary.value.deliveryVolume = wallets.reduce((sum: number, row: any) => sum + (Number(row.total_weight) || 0), 0);
+        summary.value.pointsGiven = wallets.reduce((sum: number, row: any) => sum + (Number(row.total_earnings) || 0), 0);
+        summary.value.submissions = reviews.filter((row: any) => Number(row.api_weight) > 0).length;
 
-          if (rpcStats) {
-            summary.value.deliveryVolume = Number(rpcStats.deliveryVolume) || 0;
-            summary.value.submissions = Number(rpcStats.submissions) || 0;
-            summary.value.pointsGiven = Number(rpcStats.pointsGiven) || 0;
+        const wasteMap = new Map();
+        reviews.forEach((row: any) => {
+          const dateKey = (row.submitted_at || row.created_at || '').split('T')[0];
+          if (!dateKey) return;
+          if (!wasteMap.has(dateKey)) wasteMap.set(dateKey, { date: dateKey, delivery_weight: 0, delivery_count: 0, collection_weight: 0, collection_count: 0 });
+          const entry = wasteMap.get(dateKey);
+          entry.delivery_weight += Number(row.api_weight) || 0;
+          if (Number(row.api_weight) > 0) entry.delivery_count += 1;
+        });
+        wasteTrends.value = Array.from(wasteMap.values()).sort((a: any, b: any) => a.date.localeCompare(b.date));
+
+        const withdrawalMap = new Map();
+        withdrawals.forEach((row: any) => {
+          const dateKey = (row.created_at || '').split('T')[0];
+          if (!dateKey) return;
+          if (!withdrawalMap.has(dateKey)) withdrawalMap.set(dateKey, { date: dateKey, request_amount: 0, approved_amount: 0, applicants: 0 });
+          const entry = withdrawalMap.get(dateKey);
+          const amount = Number(row.amount) || 0;
+          entry.request_amount += amount;
+          if (String(row.status || '').toUpperCase() === 'APPROVED' || String(row.status || '').toUpperCase() === 'PAID') {
+            entry.approved_amount += amount;
           }
-      } else {
-          // Reset to 0, we will sum manually in the loop below
-          summary.value = { deliveryVolume: 0, submissions: 0, newUsers: 0, pointsGiven: 0 };
-      }
-
-      // 4. WASTE TRENDS (Submissions)
-      const wasteMap = new Map();
-
-      let qSubs = supabase.from('submission_reviews')
-        .select('api_weight, submitted_at, calculated_value'); 
-      
-      if (startDateStr) qSubs = qSubs.gte('submitted_at', startDateStr);
-      if (auth.role !== 'VIEWER' && auth.merchantId) qSubs = qSubs.eq('merchant_id', auth.merchantId);
-      
-      // ✅ Filter by Machine
-      if (selectedMachineId.value) {
-        qSubs = qSubs.eq('device_no', selectedMachineId.value);
-      }
-      
-      const { data: subsData } = await qSubs;
-      if (subsData) {
-        subsData.forEach((r: any) => {
-           const day = r.submitted_at.split('T')[0];
-           if (!wasteMap.has(day)) wasteMap.set(day, { date: day, delivery_weight: 0, delivery_count: 0, collection_weight: 0, collection_count: 0 });
-           const entry = wasteMap.get(day);
-           
-           const w = Number(r.api_weight) || 0;
-           entry.delivery_weight += w < 0 ? 0 : w;
-           entry.delivery_count += 1;
-
-           // ✅ Manual Summary Accumulation
-           if (selectedMachineId.value) {
-             summary.value.deliveryVolume += (w < 0 ? 0 : w);
-             summary.value.submissions += 1;
-             summary.value.pointsGiven += (Number(r.calculated_value) || 0);
-           }
+          entry.applicants += 1;
         });
-      }
-
-      // 5. CLEANING RECORDS
-      let qClean = supabase.from('cleaning_records')
-        .select('bag_weight_collected, cleaned_at');
-        
-      if (startDateStr) qClean = qClean.gte('cleaned_at', startDateStr);
-      if (auth.role !== 'VIEWER' && auth.merchantId) qClean = qClean.eq('merchant_id', auth.merchantId);
-      
-      // ✅ Filter by Machine
-      if (selectedMachineId.value) {
-        qClean = qClean.eq('device_no', selectedMachineId.value);
-      }
-
-      const { data: cleanData } = await qClean;
-      if (cleanData) {
-        cleanData.forEach((r: any) => {
-           const day = r.cleaned_at ? r.cleaned_at.split('T')[0] : 'Unknown';
-           if (day === 'Unknown') return;
-           if (!wasteMap.has(day)) wasteMap.set(day, { date: day, delivery_weight: 0, delivery_count: 0, collection_weight: 0, collection_count: 0 });
-           const entry = wasteMap.get(day);
-           entry.collection_weight += Number(r.bag_weight_collected) || 0;
-           entry.collection_count += 1;
-        });
-      }
-      
-      wasteTrends.value = Array.from(wasteMap.values()).sort((a: any, b: any) => a.date.localeCompare(b.date));
-
-      // 6. WITHDRAWAL TRENDS
-      // ✅ Hide if machine selected (withdrawals are user-based)
-      if (selectedMachineId.value) {
-         withdrawalTrends.value = [];
+        withdrawalTrends.value = Array.from(withdrawalMap.values()).sort((a: any, b: any) => a.date.localeCompare(b.date));
+        collectionLogs.value = cleanDataRes.data || [];
       } else {
-         let qWith = supabase.from('withdrawals')
-            .select('amount, status, created_at');
-         if (startDateStr) qWith = qWith.gte('created_at', startDateStr);
-         if (auth.role !== 'VIEWER' && auth.merchantId) qWith = qWith.eq('merchant_id', auth.merchantId);
+        const { data: allUsers } = await proxySelect('users', { limit: 10000 });
+        let filtered = allUsers || [];
+        if (startDateStr) filtered = filtered.filter((u: any) => u.created_at >= startDateStr);
 
-         const { data: wData } = await qWith;
-         if (wData) {
-            const withMap = new Map();
-            wData.forEach((w: any) => {
-                 const day = w.created_at.split('T')[0];
-                 if (!withMap.has(day)) withMap.set(day, { 
-                     date: day, request_amount: 0, approved_amount: 0, paid_amount: 0, applicants: 0 
-                 });
-                 const entry = withMap.get(day);
-                 const amt = Number(w.amount) || 0;
-                 entry.request_amount += amt;
-                 entry.applicants += 1;
-                 const status = (w.status || '').toUpperCase();
-                 if (status === 'APPROVED' || status === 'PAID') entry.approved_amount += amt;
-            });
-            withdrawalTrends.value = Array.from(withMap.values()).sort((a: any, b: any) => a.date.localeCompare(b.date));
-         }
-      }
+        summary.value.newUsers = filtered.length;
+        if (timeFilter.value === 'all' && !startDateStr) {
+          summary.value.deliveryVolume = totalWeight.value;
+          summary.value.pointsGiven = totalLifetimePoints.value;
+          summary.value.submissions = filtered.filter((u: any) => Number(u.total_weight) > 0).length;
+        } else {
+          summary.value.deliveryVolume = filtered.reduce((sum: number, u: any) => sum + (Number(u.total_weight) || 0), 0);
+          summary.value.pointsGiven = filtered.reduce((sum: number, u: any) => sum + (Number(u.total_points) || 0), 0);
+          summary.value.submissions = filtered.filter((u: any) => Number(u.total_weight) > 0).length;
+        }
 
-      // 7. NEW USERS (Global stat, skip if machine filtered)
-      if (!selectedMachineId.value) {
-        let qNewUsers = supabase.from('users').select('*', { count: 'exact', head: true });
-        if (startDateStr) qNewUsers = qNewUsers.gte('created_at', startDateStr);
-        const { count } = await qNewUsers;
-        summary.value.newUsers = count || 0;
-      }
-      
-      // 8. COLLECTION LOGS
-      let qCollections = supabase.from('cleaning_records').select('*').order('cleaned_at', { ascending: false });
-      if (startDateStr) qCollections = qCollections.gte('cleaned_at', startDateStr);
-      if (auth.merchantId) qCollections = qCollections.eq('merchant_id', auth.merchantId);
-      
-      // ✅ Filter by Machine
-      if (selectedMachineId.value) {
-        qCollections = qCollections.eq('device_no', selectedMachineId.value);
-      }
-      
-      const { data: cData } = await qCollections;
-      if (cData) collectionLogs.value = cData;
+        const wasteMap = new Map();
+        filtered.forEach((u: any) => {
+          const dateKey = u.created_at ? u.created_at.split('T')[0] : null;
+          if (!dateKey) return;
+          if (!wasteMap.has(dateKey)) wasteMap.set(dateKey, { date: dateKey, delivery_weight: 0, delivery_count: 0, collection_weight: 0, collection_count: 0 });
+          const entry = wasteMap.get(dateKey);
+          entry.delivery_weight += Number(u.total_weight) || 0;
+          if (Number(u.total_weight) > 0) entry.delivery_count += 1;
+        });
+        wasteTrends.value = Array.from(wasteMap.values()).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
+        withdrawalTrends.value = [];
+        const { data: cleanData } = await proxySelect('cleaning_records', {
+          order: { column: 'cleaned_at', ascending: false },
+          limit: 50,
+        });
+        collectionLogs.value = cleanData || [];
+      }
     } catch (e) {
-      console.error(e);
+      console.error('fetchFilteredStats error:', e);
     } finally {
       statsLoading.value = false;
     }
   }
-  
+
   return {
     loading,
     statsLoading,
@@ -311,6 +297,6 @@ export function useBigDataStats() {
     recentSubmissions,
     collectionLogs,
     fetchInitialData,
-    fetchFilteredStats
+    fetchFilteredStats,
   };
 }

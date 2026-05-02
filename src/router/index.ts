@@ -12,6 +12,9 @@ import UserDetail from '../views/UserDetail.vue';
 import MachineStatus from '../views/MachineStatus.vue';
 import Login from '../views/Login.vue';
 import AdminManager from '../views/AdminManager.vue';
+import Agencies from '../views/Agencies.vue';
+import CommissionConfig from '../views/CommissionConfig.vue';
+import BulkCollection from '../views/BulkCollection.vue';
 import IssueReports from '../views/IssueReports.vue';
 import MerchantSettings from '../views/MerchantSettings.vue';
 import BigDataPlatform from '../views/BigDataPlatform.vue';
@@ -20,6 +23,7 @@ import CustomerServiceInbox from '../views/CustomerServiceInbox.vue';
 import CustomerThreadDetail from '../views/CustomerThreadDetail.vue';
 import LeadsManager from '../views/LeadsManager.vue';
 import AIVerificationDashboard from '../views/AIVerificationDashboard.vue';
+import MyGreenShopOrders from '../views/MyGreenShopOrders.vue';
 
 const MerchantsManager = () => import('../views/SuperAdmin/Merchants.vue');
 const ManageClientSettings = () => import('../views/SuperAdmin/ManageClientSettings.vue');
@@ -41,6 +45,12 @@ const router = createRouter({
       name: 'Contact',
       component: () => import('../views/IntakePage.vue'),
       meta: { hideSidebar: true, requiresAuth: false, title: 'Contact Us' }
+    },
+    {
+      path: '/live-command-center',
+      name: 'LiveCommandCenter',
+      component: () => import('../views/LiveCommandCenter.vue'),
+      meta: { hideSidebar: true, requiresAuth: true, title: 'Live Command Center' }
     },
     {
       path: '/big-data',
@@ -86,13 +96,13 @@ const router = createRouter({
           path: 'submissions', // Note: No leading slash
           name: 'submissions',
           component: () => import('../views/Submissions.vue'),
-          meta: { title: 'Submissions' } 
+          meta: { title: 'Drop-offs' } 
         },
         {
           path: 'withdrawals',
           name: 'withdrawals',
           component: Withdrawals,
-          meta: { title: 'Withdrawals' } 
+          meta: { title: 'Cash Out' } 
         },
         {
           path: 'users',
@@ -116,7 +126,24 @@ const router = createRouter({
           path: 'admins', 
           name: 'admins',
           component: AdminManager,
-          meta: { title: 'Admin Access' } 
+        },
+        {
+          path: 'agencies',
+          name: 'agencies',
+          component: Agencies,
+          meta: { requiresSuperAdmin: true, title: 'Agencies' }
+        },
+        {
+          path: 'agencies/commission',
+          name: 'commission',
+          component: CommissionConfig,
+          meta: { requiresSuperAdmin: true, title: 'Commission' }
+        },
+        {
+          path: 'bulk-collection',
+          name: 'BulkCollection',
+          component: BulkCollection,
+          meta: { title: 'Bulk Collection' } 
         },
         {
           path: 'cleaning-logs',
@@ -192,6 +219,25 @@ const router = createRouter({
           name: 'AIVerification',
           component: AIVerificationDashboard,
           meta: { title: 'AI Verification' } 
+        },
+        {
+          path: 'admin-leaderboard',
+          name: 'AdminLeaderboard',
+          component: () => import('../views/AdminLeaderboard.vue'),
+          meta: { title: 'Leaderboard & Audit' }
+        },
+        {
+          path: 'active-recyclers',
+          alias: '/live-recycler-monitor',
+          name: 'ActiveRecyclers',
+          component: () => import('../views/ActiveRecyclers.vue'),
+          meta: { title: 'Active Recyclers' }
+        },
+        {
+          path: 'orders',
+          name: 'MyGreenShopOrders',
+          component: MyGreenShopOrders,
+          meta: { title: 'MyGreenShop Orders' }
         },
       ]
     }
