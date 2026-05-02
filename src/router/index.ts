@@ -71,8 +71,8 @@ const router = createRouter({
     // --------------------------------------------------------
     {
       path: '/',
-      component: Layout, // 👈 THIS IS KEY: Loads Layout (Sidebar+Tabs) first
-      meta: { requiresAuth: true },
+      component: Layout,
+      meta: { requiresAuth: false },
       // All these pages will render INSIDE Layout's <router-view>
       children: [
         {
