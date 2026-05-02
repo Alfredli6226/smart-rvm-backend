@@ -48,43 +48,71 @@ async function vGet(path, params = {}) {
 
 // Fetch ALL integral records from vendor API (paginated, in parallel)
 export async function fetchAllIntegralRecords(maxPages = 70) {
-  // First, get total count
-  const first = await vGet('/system/integral/list', { page: 1, pageSize: 50 });
-  if (!first.ok || !first.data) return [];
-  
-  const total = parseInt(first.data.total || '0');
-  const firstRows = first.data.rows || [];
-  if (total <= 50) return firstRows;
-  
-  const totalPages = Math.ceil(total / 50);
-  const pagesToFetch = Math.min(totalPages, maxPages);
-  
-  // Fetch remaining pages in parallel
-  const pagePromises = [];
-  for (let p = 2; p <= pagesToFetch; p++) {
-    pagePromises.push(
-      vGet('/system/integral/list', { page: p, pageSize: 50 })
-        .then(r => r.ok && r.data ? (r.data.rows || []) : [])
-        .catch(() => [])
-    );
+  // Try ALL userType filters in parallel to capture both Mix and UCO records
+  const userTypes = [null, 11, 12, 1, 2];
+  const allResults = await Promise.all(userTypes.map(async (ut) => {
+    try {
+      const params = ut ? { page: 1, pageSize: 50, userType: ut } : { page: 1, pageSize: 50 };
+      const first = await vGet('/system/integral/list', params);
+      if (!first.ok || !first.data) return [];
+      const total = parseInt(first.data.total || '0');
+      const rows = first.data.rows || [];
+      if (total <= 50) return rows;
+      
+      const totalPages = Math.min(Math.ceil(total / 50), maxPages);
+      const promises = [];
+      for (let p = 2; p <= totalPages; p++) {
+        const pParams = ut ? { page: p, pageSize: 50, userType: ut } : { page: p, pageSize: 50 };
+        promises.push(
+          vGet('/system/integral/list', pParams)
+            .then(r => r.ok && r.data ? (r.data.rows || []) : [])
+            .catch(() => [])
+        );
+      }
+      const more = await Promise.all(promises);
+      return [...rows, ...more.flat()];
+    } catch(e) { return []; }
+  }));
+
+  // Merge and deduplicate
+  const seen = new Set();
+  const merged = [];
+  for (const records of allResults) {
+    for (const r of records) {
+      const key = r.id || (r.userId + '_' + r.integralNum + '_' + (r.recordedTime || r.createTime));
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        merged.push(r);
+      }
+    }
   }
-  
-  const remainingPages = await Promise.all(pagePromises);
-  return [...firstRows, ...remainingPages.flat()];
+  return merged;
 }
 
 // Fetch just the first N pages (for quick recent data)
 export async function fetchRecentIntegralRecords(pages = 3) {
-  const promises = [];
-  for (let p = 1; p <= pages; p++) {
-    promises.push(
-      vGet('/system/integral/list', { page: p, pageSize: 50 })
-        .then(r => r.ok && r.data ? (r.data.rows || []) : [])
-        .catch(() => [])
-    );
+  const results = await Promise.all([null, 11, 12, 1, 2].map(ut => {
+    const promises = [];
+    for (let p = 1; p <= pages; p++) {
+      const params = ut ? { page: p, pageSize: 50, userType: ut } : { page: p, pageSize: 50 };
+      promises.push(
+        vGet('/system/integral/list', params)
+          .then(r => r.ok && r.data ? (r.data.rows || []) : [])
+          .catch(() => [])
+      );
+    }
+    return Promise.all(promises);
+  }));
+  
+  const seen = new Set();
+  const merged = [];
+  for (const records of results) {
+    for (const r of records.flat()) {
+      const key = r.id || (r.userId + '_' + r.integralNum + '_' + (r.recordedTime || r.createTime));
+      if (key && !seen.has(key)) { seen.add(key); merged.push(r); }
+    }
   }
-  const results = await Promise.all(promises);
-  return results.flat();
+  return merged;
 }
 
 // Convert integralNum to weight  
