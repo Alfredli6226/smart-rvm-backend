@@ -350,6 +350,22 @@ function progressColor(pct: number): string {
       </div>
     </div>
 
+    <!-- CO2 + Trees row -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div class="bg-emerald-50 rounded-xl p-3 sm:p-4 shadow-sm border border-emerald-100">
+        <p class="text-xs font-semibold text-emerald-600 uppercase tracking-wider">🌿 Total CO2 Saved</p>
+        <p class="text-xl sm:text-2xl font-extrabold text-emerald-700 mt-1">{{ liveCO2.toLocaleString() || summaryData.totalCarbon.toFixed(1) }} <span class="text-sm font-normal text-emerald-500">kg</span></p>
+      </div>
+      <div class="bg-green-50 rounded-xl p-3 sm:p-4 shadow-sm border border-green-100">
+        <p class="text-xs font-semibold text-green-600 uppercase tracking-wider">🌳 Trees Equivalent</p>
+        <p class="text-xl sm:text-2xl font-extrabold text-green-700 mt-1">{{ liveTrees || Math.round(summaryData.totalCarbon / 20) }}</p>
+      </div>
+      <div class="bg-blue-50 rounded-xl p-3 sm:p-4 shadow-sm border border-blue-100">
+        <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider">♻️ Total Recycled</p>
+        <p class="text-xl sm:text-2xl font-extrabold text-blue-700 mt-1">{{ liveRecycledWeight ? liveRecycledWeight.toLocaleString() : summaryData.totalRecycled.toFixed(1) }} <span class="text-sm font-normal text-blue-500">kg</span></p>
+      </div>
+    </div>
+
     <!-- Search & Filter Bar -->
     <div class="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100">
       <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
