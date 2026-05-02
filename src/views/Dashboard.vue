@@ -92,7 +92,7 @@ const envFiltering = ref(false);
 async function fetchFilteredImpact() {
   envFiltering.value = true;
   try {
-    let params = '/api/certificates?action=overview';
+    let params = '/api/user-analytics?endpoint=cert-overview';
     const today = new Date().toISOString().slice(0, 10);
     
     if (envDateRange.value === 'today') {
@@ -297,7 +297,7 @@ const certificatesLoading = ref(false);
 async function fetchCertificatesData() {
   certificatesLoading.value = true;
   try {
-    const resp = await fetch('/api/certificates?action=overview');
+    const resp = await fetch('/api/user-analytics?endpoint=cert-overview');
     if (resp.ok) {
       const json = await resp.json();
       if (json.success && json.data) {

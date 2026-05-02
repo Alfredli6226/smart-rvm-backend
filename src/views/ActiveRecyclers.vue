@@ -171,7 +171,7 @@ const { generateReport } = useESGExport();
 
 async function exportESGReport() {
   try {
-    const resp = await fetch('/api/certificates?action=overview');
+    const resp = await fetch('/api/user-analytics?endpoint=cert-overview');
     const json = await resp.json();
     if (json.success && json.data) {
       const d = json.data;
