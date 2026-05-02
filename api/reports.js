@@ -42,7 +42,7 @@ export default async function handler(req, res) {
 async function getOverview(res) {
   try {
     const [records, devices, supabase] = await Promise.all([
-      fetchRecentIntegralRecords(5), // Get ~250 latest records
+      fetchAllIntegralRecords(70), // Get ALL records (~3250)
       fetchVendorDevices(),
       createClient(SUPABASE_URL, SUPABASE_KEY)
     ]);
