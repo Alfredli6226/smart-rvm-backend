@@ -40,13 +40,15 @@ const CO2_PER_KG = 0.85; // kg CO2 saved per kg recycled
 const TREES_PER_KG_CO2 = 0.05; // 1 tree ≈ 20 kg CO2/year
 
 const displayCO2 = computed(() => {
-  // Use filtered data when available (any date range), fallback to all-time
-  if (filteredCO2.value > 0) return filteredCO2.value.toFixed(1);
+  // Show filter label when a non-default date is selected
+  const filterActive = envDateRange.value !== 'thisMonth' || (envDateRange.value === 'custom' && envDateFrom.value);
+  if (filterActive) return (filteredCO2.value || 0).toFixed(1);
   return (totalWeight.value * CO2_PER_KG).toFixed(1);
 });
 
 const displayTrees = computed(() => {
-  if (filteredTrees.value > 0) return filteredTrees.value;
+  const filterActive = envDateRange.value !== 'thisMonth' || (envDateRange.value === 'custom' && envDateFrom.value);
+  if (filterActive) return filteredTrees.value || 0;
   return Math.round(totalWeight.value * CO2_PER_KG * TREES_PER_KG_CO2);
 });
 
