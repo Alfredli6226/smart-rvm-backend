@@ -40,10 +40,17 @@ const CO2_PER_KG = 0.85; // kg CO2 saved per kg recycled
 const TREES_PER_KG_CO2 = 0.05; // 1 tree ≈ 20 kg CO2/year
 
 const co2Saved = computed(() => {
+  // Use filtered value when date filter active (not 'thisMonth' default)
+  if (envDateRange.value !== 'thisMonth' && filteredCO2.value > 0) {
+    return filteredCO2.value.toFixed(1);
+  }
   return (totalWeight.value * CO2_PER_KG).toFixed(1);
 });
 
 const treesEquivalent = computed(() => {
+  if (envDateRange.value !== 'thisMonth' && filteredTrees.value > 0) {
+    return filteredTrees.value;
+  }
   return Math.round(totalWeight.value * CO2_PER_KG * TREES_PER_KG_CO2);
 });
 
@@ -77,6 +84,64 @@ function exportExcel() {
 function downloadPdf() {
   alert('Download PDF: Environmental impact report will be generated as PDF');
 }
+
+// Filtered CO2/tree data - updated when date range changes
+const filteredCO2 = ref(0);
+const filteredTrees = ref(0);
+const filteredWeight = ref(0);
+const envFiltering = ref(false);
+
+async function fetchFilteredImpact() {
+  envFiltering.value = true;
+  try {
+    let params = '/api/certificates?action=overview';
+    const today = new Date().toISOString().slice(0, 10);
+    
+    if (envDateRange.value === 'today') {
+      params += '&dateFrom=' + today + '&dateTo=' + today;
+    } else if (envDateRange.value === 'yesterday') {
+      const d = new Date(); d.setDate(d.getDate() - 1);
+      const y = d.toISOString().slice(0, 10);
+      params += '&dateFrom=' + y + '&dateTo=' + y;
+    } else if (envDateRange.value === 'thisWeek') {
+      const d = new Date(); const day = d.getDay();
+      const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+      params += '&dateFrom=' + mon.toISOString().slice(0, 10) + '&dateTo=' + today;
+    } else if (envDateRange.value === 'thisMonth') {
+      const m = today.slice(0, 7) + '-01';
+      params += '&dateFrom=' + m + '&dateTo=' + today;
+    } else if (envDateRange.value === 'lastMonth') {
+      const d = new Date(); d.setMonth(d.getMonth() - 1);
+      const lmStart = d.toISOString().slice(0, 7) + '-01';
+      d.setMonth(d.getMonth() + 1); d.setDate(0);
+      const lmEnd = d.toISOString().slice(0, 10);
+      params += '&dateFrom=' + lmStart + '&dateTo=' + lmEnd;
+    } else if (envDateRange.value === 'custom' && envDateFrom.value && envDateTo.value) {
+      params += '&dateFrom=' + envDateFrom.value + '&dateTo=' + envDateTo.value;
+    }
+    
+    const res = await fetch(params);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.data) {
+        const d = json.data;
+        filteredCO2.value = d.filteredCarbonSaved || d.todayCarbonSaved || d.carbonSaved || 0;
+        filteredTrees.value = d.filteredTreesEquivalent || d.todayTreesEquivalent || d.treesEquivalent || 0;
+        filteredWeight.value = d.filteredWeight || d.todayWeight || d.totalWeight || 0;
+      }
+    }
+  } catch(e) {
+    console.warn('Filter fetch failed:', e);
+  } finally {
+    envFiltering.value = false;
+  }
+}
+
+// Watch for filter changes and update
+watch(envDateRange, () => { fetchFilteredImpact(); });
+watch(envDateFrom, () => { if (envDateRange.value === 'custom') fetchFilteredImpact(); });
+watch(envDateTo, () => { if (envDateRange.value === 'custom') fetchFilteredImpact(); });
+watch(envMachineFilter, () => { fetchFilteredImpact(); });
 
 // Agent-specific state
 const isAgent = computed(() => {

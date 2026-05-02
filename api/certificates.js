@@ -50,9 +50,20 @@ export default async function handler(req, res) {
     const todayRecords = records.filter(r => (r.recordedTime || r.createTime || '').startsWith(today));
     const todayWeight = todayRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
 
+    // Date range filtering (for env impact filter)
+    const dateFrom = req.query.dateFrom || req.query.from || '';
+    const dateTo = req.query.dateTo || req.query.to || '';
+    let filteredRecords = records;
+    if (dateFrom) filteredRecords = filteredRecords.filter(r => (r.recordedTime || r.createTime || '') >= dateFrom);
+    if (dateTo) filteredRecords = filteredRecords.filter(r => (r.recordedTime || r.createTime || '') <= dateTo + ' 23:59:59');
+    const filteredWeight = filteredRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+    const filteredSubmissions = filteredRecords.length;
+    const filteredUsers = new Set(filteredRecords.map(r => r.userId)).size;
+
     // CO2 / Tree calculations
     const overall = calcImpact(totalWeight);
     const todayImpact = calcImpact(todayWeight);
+    const filteredImpact = calcImpact(filteredWeight);
 
     if (action === 'overview') {
       return res.status(200).json({
@@ -69,7 +80,13 @@ export default async function handler(req, res) {
           todayCarbonSaved: todayImpact.totalCo2,
           todayTreesEquivalent: todayImpact.treesEquivalent,
           machineCount: devices.length,
-          onlineCount: devices.filter(d => d.is_online).length
+          onlineCount: devices.filter(d => d.is_online).length,
+          // Date range filtered
+          filteredWeight: +filteredWeight.toFixed(1),
+          filteredSubmissions,
+          filteredUsers,
+          filteredCarbonSaved: filteredImpact.totalCo2,
+          filteredTreesEquivalent: filteredImpact.treesEquivalent
         },
         timestamp: new Date().toISOString()
       });
