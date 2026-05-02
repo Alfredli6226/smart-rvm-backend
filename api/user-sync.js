@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const [records, userRes] = await Promise.all([
       fetchAllIntegralRecords(70),
       SUPABASE_URL && SUPABASE_KEY 
-        ? fetch(SUPABASE_URL + '/rest/v1/users?select=user_id,nickname,phone,total_weight&limit=2000&order=user_id.asc', {
+        ? fetch(SUPABASE_URL + '/rest/v1/users?select=user_id,nickname,phone,total_weight&limit=10000&order=user_id.asc', {
             headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json' }
           }).then(r => r.json()).catch(() => [])
         : []
@@ -57,12 +57,11 @@ export default async function handler(req, res) {
       };
     }
     
-    // Add users from Supabase (who have weight but no integral records)
+    // Add users from Supabase (all registered users, even with 0 weight)
     if (Array.isArray(userRes)) {
       for (const u of userRes) {
         const uid = String(u.user_id);
-        const wt = parseFloat(u.total_weight || 0);
-        if (wt > 0 && !enrichedMap[uid]) {
+        if (!enrichedMap[uid]) {
           enrichedMap[uid] = {
             userId: uid,
             name: u.nickname || u.phone || 'User',
