@@ -123,6 +123,22 @@ export function useUserList() {
       ]);
 
       if (usersRes.error) throw new Error(usersRes.error);
+      
+      // Fetch live vendor weights and merge with Supabase user data
+      let vendorWeights: Record<string, number> = {};
+      try {
+        const r = await fetch('/api/user-analytics?endpoint=active-recyclers&limit=200');
+        if (r.ok) {
+          const d = await r.json();
+          if (d.success && d.data) {
+            d.data.forEach((v: any) => {
+              if (v.userId) vendorWeights[v.userId] = v.totalRecycled || 0;
+              if (v.phone) vendorWeights[v.phone] = v.totalRecycled || 0;
+            });
+          }
+        }
+      } catch(e) {}
+
       const wallets = walletsRes.data || [];
 
       const walletsByUser = wallets.reduce((acc: any, row: any) => {
@@ -135,6 +151,10 @@ export function useUserList() {
         const userWallets = walletsByUser[u.user_id] || [];
         const walletWeight = userWallets.reduce((sum: number, w: any) => sum + Number(w.total_weight || 0), 0);
         const walletBalance = userWallets.reduce((sum: number, w: any) => sum + Number(w.current_balance || 0), 0);
+        
+        // Prefer live vendor weight over stale wallet weight
+        const liveWeight = vendorWeights[u.user_id] || vendorWeights[u.phone] || 0;
+        const weight = liveWeight > 0 ? liveWeight : walletWeight;
 
         return {
           ...u,
@@ -142,7 +162,7 @@ export function useUserList() {
           nickname: u.nickname || u.nickName || u.full_name || u.phone,
           balance: Number(walletBalance.toFixed(2)),
           earnings: Number(walletBalance.toFixed(2)),
-          total_weight: Number(walletWeight.toFixed(2)),
+          total_weight: Number(weight.toFixed(2)),
         };
       });
     } catch (err: any) {
