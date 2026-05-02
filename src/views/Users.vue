@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useUserList } from '../composables/useUserList';
 import { ChevronRight, Smartphone, Scale, Search, DownloadCloud, Wallet, ChevronLeft, Mail, TrendingUp, Users, Clock, Star } from 'lucide-vue-next';
@@ -10,8 +10,12 @@ import UserAdjustBalanceModal from '../components/UserAdjustBalanceModal.vue';
 import UserCreateModal from '../components/UserCreateModal.vue';
 
 // Logic
-const { users, loading, isSubmitting, adjustBalance, importUser, deleteUser } = useUserList();
+const { users, loading, isSubmitting, fetchUsers, adjustBalance, importUser, deleteUser } = useUserList();
 const searchQuery = ref('');
+
+onMounted(() => {
+  fetchUsers();
+});
 
 // --- CATEGORY FILTER ---
 type FilterType = 'all' | 'top_recyclers' | 'new_registers' | 'active_users';
