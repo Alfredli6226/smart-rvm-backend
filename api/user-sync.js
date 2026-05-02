@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const [records, userRes] = await Promise.all([
       fetchAllIntegralRecords(70),
       SUPABASE_URL && SUPABASE_KEY 
-        ? fetch(SUPABASE_URL + '/rest/v1/users?select=user_id,nickname,phone,total_weight', {
+        ? fetch(SUPABASE_URL + '/rest/v1/users?select=user_id,nickname,phone,total_weight&limit=2000&order=user_id.asc', {
             headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json' }
           }).then(r => r.json()).catch(() => [])
         : []
