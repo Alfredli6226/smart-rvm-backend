@@ -120,9 +120,13 @@ export function useUserList() {
       }
     } catch(e) {}
     
+    // Skip auth check - if vendor API failed, show empty (not blocked)
     const isPlatformOwner = auth.role === 'SUPER_ADMIN' && !auth.merchantId;
     const isViewer = auth.role === 'VIEWER';
-    if (!auth.merchantId && !isPlatformOwner && !isViewer) { loading.value = false; return; }
+    if (!auth.merchantId && !isPlatformOwner && !isViewer) { 
+      loading.value = false; 
+      return; // No data but not blocked - shows empty table
+    }
     try {
       if (auth.merchantId) {
         await fetchMerchantScopedUsers(auth.merchantId);
