@@ -48,6 +48,9 @@ export function useDashboardStats() {
       const merchantId = auth.merchantId || null;
 
       if (merchantId) {
+        const savedWeight = totalWeight.value; // Save live vendor weight
+        const savedPoints = totalPoints.value;
+
         const [pendingRes, recWRes, recCRes, walletsRes] = await Promise.all([
           proxySelect('withdrawals', { count: true, head: true, eq: { status: 'PENDING', merchant_id: merchantId } }),
           proxySelect('withdrawals', {
@@ -71,9 +74,12 @@ export function useDashboardStats() {
         recentWithdrawals.value = recWRes.data || [];
         recentCleaning.value = recCRes.data || [];
 
-        const wallets = walletsRes.data || [];
-        totalWeight.value = wallets.reduce((sum: number, w: any) => sum + (Number(w.total_weight) || 0), 0);
-        totalPoints.value = wallets.reduce((sum: number, w: any) => sum + (Number(w.total_earnings) || 0), 0);
+        // Only overwrite weight/points if live data is 0 (use Supabase as fallback)
+        if (savedWeight === 0) {
+          const wallets = walletsRes.data || [];
+          totalWeight.value = wallets.reduce((sum: number, w: any) => sum + (Number(w.total_weight) || 0), 0);
+          totalPoints.value = wallets.reduce((sum: number, w: any) => sum + (Number(w.total_earnings) || 0), 0);
+        }
 
         const userIds = Array.from(new Set(wallets.map((w: any) => w.user_id).filter(Boolean)));
         if (userIds.length > 0) {
@@ -97,13 +103,14 @@ export function useDashboardStats() {
         return;
       }
 
-      // Use direct Supabase for SUPER_ADMIN (no merchantId) — proxy was unreliable
-      const [pendingCountRes, recWRes, recSRes, recCRes, usersStatsRes] = await Promise.all([
+      // Use direct Supabase for SUPER_ADMIN (no merchantId)
+      // Only load auxiliary data (pending, withdrawals, recent). 
+      // DON'T overwrite totalWeight/totalPoints from stale Supabase users table!
+      const [pendingCountRes, recWRes, recSRes, recCRes] = await Promise.all([
         supabase.from('withdrawals').select('*', { count: 'exact', head: true }).eq('status', 'PENDING'),
         supabase.from('withdrawals').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.from('users').select('nickName,user_id,total_weight,total_points,last_active_at').order('last_active_at', { ascending: false }).limit(20),
         supabase.from('cleaning_records').select('*').order('cleaned_at', { ascending: false }).limit(5),
-        supabase.from('users').select('total_weight,total_points').limit(10000),
       ]);
 
       pendingCount.value = Number(pendingCountRes.count || 0);
@@ -116,20 +123,9 @@ export function useDashboardStats() {
         submitted_at: u.last_active_at || null,
       }));
 
-      const usersData = usersStatsRes.data || [];
-      totalWeight.value = usersData.reduce((sum: number, u: any) => sum + (Number(u.total_weight) || 0), 0);
-      totalPoints.value = usersData.reduce((sum: number, u: any) => sum + (Number(u.total_points) || 0), 0);
+      // Keep live vendor weight - don't overwrite from stale Supabase users table
     } catch (err) {
       console.error('Stats Error:', err);
-      // Fallback: fetch live stats from vendor API
-      try {
-        const r = await fetch('/api/reports?action=overview');
-        if (r.ok) {
-          const d = await r.json();
-          const w = parseFloat(d.totalWeight) || 0;
-          if (w > 0) { totalWeight.value = w; totalPoints.value = parseFloat(d.totalPoints) || 0; }
-        }
-      } catch(e) { console.warn('Live stats fallback failed:', e); }
     } finally {
       loading.value = false;
     }
