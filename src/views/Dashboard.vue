@@ -1152,7 +1152,7 @@ onMounted(async () => {
       <div class="text-gray-400 animate-pulse font-medium">Loading Dashboard...</div>
     </div>
 
-    <div v-else>
+    <div v-show="!statsLoading">
       <!-- AGENT Stats Cards -->
       <div v-if="isAgent" class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8">
         <StatsCard title="Active Alerts" :value="activeAlertsCount" color="amber" description="Requires Immediate Action">
