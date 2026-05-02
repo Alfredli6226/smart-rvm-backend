@@ -53,7 +53,7 @@ const displayTrees = computed(() => {
 });
 
 // Environmental Impact Filters
-const envDateRange = ref('thisMonth');
+const envDateRange = ref<string>('thisMonth');
 const envDateFrom = ref('');
 const envDateTo = ref('');
 const envMachineFilter = ref('all');
