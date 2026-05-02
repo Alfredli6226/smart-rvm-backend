@@ -39,18 +39,14 @@ const {
 const CO2_PER_KG = 0.85; // kg CO2 saved per kg recycled
 const TREES_PER_KG_CO2 = 0.05; // 1 tree ≈ 20 kg CO2/year
 
-const co2Saved = computed(() => {
-  // Use filtered value when date filter active (not 'thisMonth' default)
-  if (envDateRange.value !== 'thisMonth' && filteredCO2.value > 0) {
-    return filteredCO2.value.toFixed(1);
-  }
+const displayCO2 = computed(() => {
+  // Use filtered data when available (any date range), fallback to all-time
+  if (filteredCO2.value > 0) return filteredCO2.value.toFixed(1);
   return (totalWeight.value * CO2_PER_KG).toFixed(1);
 });
 
-const treesEquivalent = computed(() => {
-  if (envDateRange.value !== 'thisMonth' && filteredTrees.value > 0) {
-    return filteredTrees.value;
-  }
+const displayTrees = computed(() => {
+  if (filteredTrees.value > 0) return filteredTrees.value;
   return Math.round(totalWeight.value * CO2_PER_KG * TREES_PER_KG_CO2);
 });
 
@@ -1253,11 +1249,11 @@ onMounted(async () => {
             <!-- Header Stats: CO2 Saved + Trees -->
             <div class="flex items-center gap-4 sm:gap-6">
               <div class="text-center px-3 sm:px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
-                <p class="text-2xl sm:text-3xl font-extrabold">{{ co2Saved }} <span class="text-sm font-normal text-emerald-200">kg</span></p>
+                <p class="text-2xl sm:text-3xl font-extrabold">{{ displayCO2 }} <span class="text-sm font-normal text-emerald-200">kg</span></p>
                 <p class="text-[10px] sm:text-xs text-emerald-200 uppercase tracking-wider font-medium">CO₂ Saved</p>
               </div>
               <div class="text-center px-3 sm:px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
-                <p class="text-2xl sm:text-3xl font-extrabold">{{ treesEquivalent }}</p>
+                <p class="text-2xl sm:text-3xl font-extrabold">{{ displayTrees }}</p>
                 <p class="text-[10px] sm:text-xs text-emerald-200 uppercase tracking-wider font-medium flex items-center gap-1 justify-center">🌳 Trees Equivalent</p>
               </div>
             </div>
