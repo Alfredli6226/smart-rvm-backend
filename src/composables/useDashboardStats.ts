@@ -110,6 +110,15 @@ export function useDashboardStats() {
       totalPoints.value = usersData.reduce((sum: number, u: any) => sum + (Number(u.total_points) || 0), 0);
     } catch (err) {
       console.error('Stats Error:', err);
+      // Fallback: fetch live stats from vendor API
+      try {
+        const r = await fetch('/api/reports?action=overview');
+        if (r.ok) {
+          const d = await r.json();
+          const w = parseFloat(d.totalWeight) || 0;
+          if (w > 0) { totalWeight.value = w; totalPoints.value = parseFloat(d.totalPoints) || 0; }
+        }
+      } catch(e) { console.warn('Live stats fallback failed:', e); }
     } finally {
       loading.value = false;
     }

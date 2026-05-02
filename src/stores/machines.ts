@@ -57,6 +57,50 @@ export const useMachineStore = defineStore('machines', () => {
 
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+  // --- PUBLIC: Fetch machines from live API (no auth needed) ---
+  const fetchPublicMachines = async (forceRefresh = false) => {
+    const CACHE_KEY = 'rvm_live_machines_cache';
+    const cached = localStorage.getItem(CACHE_KEY);
+    const cachedTime = localStorage.getItem(CACHE_KEY + '_ts');
+    const now = Date.now();
+    
+    if (!forceRefresh && cached && cachedTime && (now - Number(cachedTime) < 120000)) {
+      machines.value = JSON.parse(cached);
+      return;
+    }
+    
+    loading.value = true;
+    try {
+      const res = await fetch('/api/machines');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        const live = data.data.map((m: any, i: number) => ({
+          id: i + 1,
+          deviceNo: m.device_no || '',
+          name: m.name || m.device_no || '',
+          address: m.address || '',
+          zone: 'General',
+          maintenanceContact: 'Unassigned',
+          googleMapsUrl: m.latitude && m.longitude ? `https://maps.google.com/?q=${m.latitude},${m.longitude}` : '#',
+          isOnline: m.is_online === true,
+          isManualOffline: false,
+          statusText: m.is_online ? 'Online' : 'Offline',
+          statusCode: m.is_online ? 2 : 0,
+          compartments: [{ label: 'Recycling', color: 'bg-green-100 text-green-800', weight: '0', percent: 0, isFull: false }]
+        }));
+        machines.value = live;
+        lastUpdated.value = now;
+        localStorage.setItem(CACHE_KEY, JSON.stringify(live));
+        localStorage.setItem(CACHE_KEY + '_ts', String(now));
+      }
+    } catch (err) {
+      console.error('fetchPublicMachines failed:', err);
+      machines.value = [];
+    } finally {
+      loading.value = false;
+    }
+  };
+
   // --- ACTION: Fetch Machines ---
   const fetchMachines = async (forceRefresh = false) => {
     const auth = useAuthStore();
@@ -64,8 +108,8 @@ export const useMachineStore = defineStore('machines', () => {
     
     // Wait for auth to be loaded if still loading or role not set
     if (auth.loading || !auth.role) {
-        console.log("MachineStore: Waiting for auth/role to be ready... loading:", auth.loading, "role:", auth.role);
-        return;
+        console.log("MachineStore: No auth - loading live machine status from API");
+        return fetchPublicMachines();
     }
     
     // 1. IDENTIFY ROLE
@@ -199,10 +243,10 @@ export const useMachineStore = defineStore('machines', () => {
         const vendorState = normalizeMachineStatus(vendorSnapshot);
         // Use DB is_manual_offline (synced from vendor device list) as primary online source
         // Fall back to vendorState if DB doesn't have data
-        let isOnline = !dbMachine.is_manual_offline;
-        if (dbMachine.is_manual_offline === null || dbMachine.is_manual_offline === undefined) {
-          isOnline = vendorState.isOnline;
-        }
+        // Use vendor status as primary; only manual override forces offline
+        let isOnline = vendorState.isOnline;
+        const isManualOffline = dbMachine.is_manual_offline === true;
+        if (isManualOffline) isOnline = false;
         
         try {
              apiRes = await getMachineConfig(dbMachine.device_no);
@@ -260,8 +304,6 @@ export const useMachineStore = defineStore('machines', () => {
         }
 
         // Status
-        const isManualOffline = dbMachine.is_manual_offline === true;
-        
         const hasFault = apiConfigs.some((c: any) => c.status === 2 || c.status === 3) || vendorState.vendorStatus === 3;
         const hasActivity = apiConfigs.some((c: any) => c.status === 1) || vendorState.vendorStatus === 1;
         const anyBinFull = compartments.some(c => c.isFull);
@@ -314,7 +356,7 @@ export const useMachineStore = defineStore('machines', () => {
           compartments
         });
         
-        await sleep(100); 
+        await sleep(10); 
       }
 
       console.log('MachineStore: computed machine statuses', tempMachines.map(m => ({
