@@ -12,6 +12,6 @@ FROM alpine:3.19
 RUN apk add --no-cache nodejs
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
-COPY api/_server.js ./server.js
+COPY alicloud/server.js ./server.js
 EXPOSE 3000
 CMD ["node", "server.js"]
