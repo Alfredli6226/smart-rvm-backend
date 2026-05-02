@@ -47,10 +47,10 @@ const router = createRouter({
       meta: { hideSidebar: true, requiresAuth: false, title: 'Contact Us' }
     },
     {
-      path: '/live-command-center',
+      path: '/live-ops',
       name: 'LiveCommandCenter',
       component: () => import('../views/LiveCommandCenter.vue'),
-      meta: { requiresAuth: true, title: 'Live Big Data Centre' }
+      meta: { requiresAuth: true, title: 'Live Ops' }
     },
     {
       path: '/big-data',
