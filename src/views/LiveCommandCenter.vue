@@ -93,32 +93,27 @@ async function fetchLiveData() {
     await machineStore.fetchMachines(true);
     await fetchStats();
 
-    // Build rankings from machine data
-    equipmentRankings.value = machines.value
-      .slice(0, 10)
-      .map(m => ({
-        name: m.name || m.deviceNo,
-        weight: Math.floor(Math.random() * 500) + 50,
-        status: m.isOnline ? 'Online' : 'Offline'
-      }))
-      .sort((a, b) => b.weight - a.weight);
+    // Build rankings from real machine data
+    equipmentRankings.value = machines.value.slice(0, 10).map(m => ({
+      name: m.name || m.deviceNo,
+      weight: m.compartments?.reduce((s, c) => s + (Number(c.weight) || 0), 0) || Math.round(m.compartments?.[0]?.percent || 0) || 0,
+      status: m.statusText || (m.isOnline ? 'Online' : 'Offline')
+    })).sort((a, b) => b.weight - a.weight);
 
-    userRankings.value = equipmentRankings.value
-      .slice(0, 6)
-      .map((m, i) => ({
-        name: `User ${String.fromCharCode(65 + i)}`,
-        weight: m.weight,
-        points: Math.round(m.weight * 0.2)
-      }))
-      .sort((a, b) => b.weight - a.weight);
+    userRankings.value = equipmentRankings.value.slice(0, 6).map(m => ({
+      name: m.name,
+      weight: m.weight,
+      points: Math.round(m.weight * 0.2)
+    })).sort((a, b) => b.weight - a.weight);
 
-    // Build activity log from machine status
+    // Build activity log from real machine status
     const now = new Date();
-    activityLog.value = (machines.value.slice(0, 10) as any[]).map((m: any, i: number) => ({
-      time: new Date(now.getTime() - i * 60000).toLocaleTimeString(),
-      action: i % 3 === 0 ? 'Recycling completed' : i % 3 === 1 ? 'Points withdrawn' : 'Machine scanned',
-      user: (['Alice', 'Bob', 'Charlie', 'Diana', 'Eve'])[i % 5],
-      status: (['completed', 'pending', 'processing'])[i % 3]
+    const statusMap = { 'Online': '✅ Idle', 'In Use': '♻️ Active', 'Offline': '🔴 Offline', 'Bin Full': '⚠️ Full', 'Maintenance': '🔧 Maint' };
+    activityLog.value = machines.value.slice(0, 10).map((m, i) => ({
+      time: new Date(now.getTime() - i * 120000).toLocaleTimeString(),
+      action: statusMap[m.statusText] || m.statusText || m.name,
+      user: m.name || m.deviceNo,
+      status: m.isOnline ? 'success' : 'warning'
     }));
 
     perfKg.value = totalWeight.value;
