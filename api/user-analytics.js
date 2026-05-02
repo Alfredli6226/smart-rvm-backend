@@ -78,11 +78,11 @@ async function getStats(res) {
 
   const { count: totalUsers } = await supabase.from('users').select('*', { count: 'exact', head: true });
 
-  const totalWeight = allRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+  const totalWeight = allRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
   const totalPoints = allRecords.reduce((s, r) => s + score(r.integralNum), 0);
   const today = new Date().toISOString().slice(0, 10);
   const todayRecords = allRecords.filter(r => (r.recordedTime || r.createTime || '').startsWith(today));
-  const todayWeight = todayRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+  const todayWeight = todayRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
 
   return res.json({
     totalUsers: totalUsers || 0,
@@ -107,7 +107,7 @@ async function getRecyclingActivity(res) {
     if (!day) return;
     if (!daily[day]) daily[day] = { submissions: 0, weight: 0, points: 0, users: new Set() };
     daily[day].submissions++;
-    daily[day].weight += integralToWeight(r.integralNum);
+    daily[day].weight += integralToWeight(r.integralNum, classifyWasteType(r));
     daily[day].points += score(r.integralNum);
     daily[day].users.add(r.userId);
   });
@@ -170,7 +170,7 @@ async function getMachineUsage(res) {
     const dn = r.deviceNo || 'Unknown';
     if (!machineStats[dn]) machineStats[dn] = { submissions: 0, weight: 0, points: 0, users: new Set() };
     machineStats[dn].submissions++;
-    machineStats[dn].weight += integralToWeight(r.integralNum);
+    machineStats[dn].weight += integralToWeight(r.integralNum, classifyWasteType(r));
     machineStats[dn].points += score(r.integralNum);
     machineStats[dn].users.add(r.userId);
   });
@@ -193,7 +193,7 @@ async function getMachineUsage(res) {
   return res.json({
     machines: usage,
     totalSubmissions: allRecords.length,
-    totalWeight: allRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0).toFixed(2),
+    totalWeight: allRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0).toFixed(2),
     liveFromVendor: true
   });
 }
@@ -205,7 +205,7 @@ async function getWasteDistribution(res) {
   allRecords.forEach(r => {
     const type = classifyWasteType(r);
     if (!breakdown[type]) breakdown[type] = { weight: 0, submissions: 0, points: 0 };
-    breakdown[type].weight += integralToWeight(r.integralNum);
+    breakdown[type].weight += integralToWeight(r.integralNum, classifyWasteType(r));
     breakdown[type].submissions++;
     breakdown[type].points += score(r.integralNum);
   });
@@ -258,7 +258,7 @@ async function getActiveRecyclers(req, res) {
         lastSeen: r.recordedTime || r.createTime || ''
       };
       userGroups[uid].records.push(r);
-      userGroups[uid].totalWeight += integralToWeight(r.integralNum);
+      userGroups[uid].totalWeight += integralToWeight(r.integralNum, classifyWasteType(r));
       userGroups[uid].totalPoints += score(r.integralNum);
       if ((r.recordedTime || r.createTime || '') > userGroups[uid].lastSeen) {
         userGroups[uid].lastSeen = r.recordedTime || r.createTime || '';
@@ -347,18 +347,18 @@ async function handleCertificate(req, res) {
     fetchAllIntegralRecords(70),
     fetchVendorDevices().catch(() => [])
   ]);
-  const totalWeight = records.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+  const totalWeight = records.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
   const totalPoints = records.reduce((s, r) => s + +(r.integralNum || 0), 0);
   const userCount = new Set(records.map(r => r.userId)).size;
   const today = new Date().toISOString().slice(0, 10);
   const todayRecords = records.filter(r => (r.recordedTime || r.createTime || '').startsWith(today));
-  const todayWeight = todayRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+  const todayWeight = todayRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
   const dateFrom = req.query.dateFrom || '';
   const dateTo = req.query.dateTo || '';
   let filteredRecords = records;
   if (dateFrom) filteredRecords = filteredRecords.filter(r => (r.recordedTime || r.createTime || '') >= dateFrom);
   if (dateTo) filteredRecords = filteredRecords.filter(r => (r.recordedTime || r.createTime || '') <= dateTo + ' 23:59:59');
-  const filteredWeight = filteredRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+  const filteredWeight = filteredRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
   const overall = calcESGImpact(totalWeight);
   const todayImpact = calcESGImpact(todayWeight);
   const filteredImpact = calcESGImpact(filteredWeight);
@@ -397,7 +397,7 @@ async function handleCertificate(req, res) {
       }});
     }
     const userRecords = records.filter(r => r.userId == userId);
-    const userWeight = userRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+    const userWeight = userRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
     const userImpact = calcESGImpact(userWeight);
     return res.status(200).json({ success: true, certificate: {
       type: 'USER_IMPACT', title: 'Recycling Impact Certificate',
@@ -413,7 +413,7 @@ async function handleCertificate(req, res) {
     const breakdown = {};
     records.forEach(r => {
       const type = 'Mixed';
-      const wt = integralToWeight(r.integralNum);
+      const wt = integralToWeight(r.integralNum, classifyWasteType(r));
       if (!breakdown[type]) breakdown[type] = { weight: 0, count: 0, submissions: 0 };
       breakdown[type].weight += wt; breakdown[type].count++; breakdown[type].submissions++;
     });

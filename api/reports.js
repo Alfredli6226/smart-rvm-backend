@@ -52,13 +52,13 @@ async function getOverview(res) {
       supabase.from('machines').select('*', { count: 'exact', head: true })
     ]);
 
-    const totalWeight = records.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+    const totalWeight = records.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
     const totalPoints = records.reduce((s, r) => s + score(r.integralNum), 0);
     const todayRecords = records.filter(r => {
       const d = r.recordedTime || r.createTime || '';
       return d.startsWith(new Date().toISOString().slice(0, 10));
     });
-    const todayWeight = todayRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+    const todayWeight = todayRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
 
     const activeMachines = devices.filter(d => d.is_online).length;
 
@@ -92,7 +92,7 @@ async function getDaily(res) {
     return d.startsWith(today);
   });
 
-  const totalWeight = todayRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+  const totalWeight = todayRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
   const totalPoints = todayRecords.reduce((s, r) => s + score(r.integralNum), 0);
 
   // Breakdown by machine
@@ -101,7 +101,7 @@ async function getDaily(res) {
     const dn = r.deviceNo || 'Unknown';
     if (!machineBreakdown[dn]) machineBreakdown[dn] = { submissions: 0, weight: 0, points: 0 };
     machineBreakdown[dn].submissions++;
-    machineBreakdown[dn].weight += integralToWeight(r.integralNum);
+    machineBreakdown[dn].weight += integralToWeight(r.integralNum, classifyWasteType(r));
     machineBreakdown[dn].points += score(r.integralNum);
   });
 
@@ -128,7 +128,7 @@ async function getWeekly(res) {
     return d >= weekStart;
   });
 
-  const totalWeight = weekRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+  const totalWeight = weekRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
   const totalPoints = weekRecords.reduce((s, r) => s + score(r.integralNum), 0);
 
   // Daily breakdown
@@ -137,7 +137,7 @@ async function getWeekly(res) {
     const day = (r.recordedTime || r.createTime || '').slice(0, 10);
     if (!dailyBreakdown[day]) dailyBreakdown[day] = { submissions: 0, weight: 0, points: 0 };
     dailyBreakdown[day].submissions++;
-    dailyBreakdown[day].weight += integralToWeight(r.integralNum);
+    dailyBreakdown[day].weight += integralToWeight(r.integralNum, classifyWasteType(r));
     dailyBreakdown[day].points += score(r.integralNum);
   });
 
@@ -164,7 +164,7 @@ async function getMonthly(res) {
     return d >= monthStart;
   });
 
-  const totalWeight = monthRecords.reduce((s, r) => s + integralToWeight(r.integralNum), 0);
+  const totalWeight = monthRecords.reduce((s, r) => s + integralToWeight(r.integralNum, classifyWasteType(r)), 0);
   const totalPoints = monthRecords.reduce((s, r) => s + score(r.integralNum), 0);
 
   const devices = await fetchVendorDevices();
@@ -175,7 +175,7 @@ async function getMonthly(res) {
   const wasteBreakdown = {};
   monthRecords.forEach(r => {
     const type = classifyWasteType(r);
-    wasteBreakdown[type] = (wasteBreakdown[type] || 0) + integralToWeight(r.integralNum);
+    wasteBreakdown[type] = (wasteBreakdown[type] || 0) + integralToWeight(r.integralNum, classifyWasteType(r));
   });
 
   return res.json({
@@ -208,7 +208,7 @@ async function getUserEngagement(res) {
   allRecords.forEach(r => {
     const uid = r.userId;
     if (!userStats[uid]) userStats[uid] = { weight: 0, points: 0, count: 0, lastDate: '' };
-    userStats[uid].weight += integralToWeight(r.integralNum);
+    userStats[uid].weight += integralToWeight(r.integralNum, classifyWasteType(r));
     userStats[uid].points += score(r.integralNum);
     userStats[uid].count++;
     const dt = r.recordedTime || r.createTime || '';
@@ -281,7 +281,7 @@ async function getRevenueProjections(res) {
     const month = (r.recordedTime || r.createTime || '').slice(0, 7);
     if (!month) return;
     if (!monthlyData[month]) monthlyData[month] = { weight: 0, submissions: 0, revenue: 0 };
-    const w = integralToWeight(r.integralNum);
+    const w = integralToWeight(r.integralNum, classifyWasteType(r));
     monthlyData[month].weight += w;
     monthlyData[month].submissions++;
     const type = classifyWasteType(r);
@@ -362,7 +362,7 @@ async function getMachineEfficiency(res) {
     const dn = r.deviceNo || 'Unknown';
     if (!machineData[dn]) machineData[dn] = { submissions: 0, weight: 0, points: 0, count: 0, lastDate: '' };
     machineData[dn].submissions++;
-    machineData[dn].weight += integralToWeight(r.integralNum);
+    machineData[dn].weight += integralToWeight(r.integralNum, classifyWasteType(r));
     machineData[dn].points += score(r.integralNum);
     machineData[dn].count++;
     const dt = r.recordedTime || r.createTime || '';

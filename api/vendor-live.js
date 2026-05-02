@@ -68,9 +68,13 @@ export async function fetchRecentIntegralRecords(pages = 3) {
   return results.flat();
 }
 
-// Convert integralNum to weight (Points = Weight × 0.2, so Weight = integralNum / 0.2)
-export function integralToWeight(integralNum) {
-  return (parseFloat(integralNum) || 0) * 5; // weight = integral / 0.2
+// Convert integralNum to weight  
+// Regular: Points = Weight × 0.2 → Weight = Points × 5  (÷ 0.2)
+// UCO:     Points = Weight × 2.5 → Weight = Points × 0.4 (÷ 2.5)
+export function integralToWeight(integralNum, wasteType) {
+  const pts = parseFloat(integralNum) || 0;
+  if (wasteType === 'UCO') return pts * 0.4; // ÷ 2.5
+  return pts * 5; // ÷ 0.2 (default: regular recycling)
 }
 
 export function score(integralNum) {
