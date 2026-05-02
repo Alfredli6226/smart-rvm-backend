@@ -102,18 +102,17 @@ export function useUserList() {
     loading.value = true;
     // Try live vendor API first for real user data
     try {
-      const r = await fetch('/api/user-analytics?endpoint=active-recyclers&limit=1000');
+      const r = await fetch('/api/user-sync?action=list');
       if (r.ok) {
         const d = await r.json();
-        if (d.success && Array.isArray(d.data) && d.data.length > 0) {
-          users.value = d.data.map((u, i) => ({
+        if (d.success && Array.isArray(d.users) && d.users.length > 0) {
+          users.value = d.users.map((u, i) => ({
             id: u.userId || i, user_id: u.userId || '',
-            nickname: u.userName || ('User ' + (u.userId || u.id || '').slice(-6)), phone: u.phone || '',
-            email: u.email || '', total_weight: u.totalRecycled || 0,
-            total_points: u.carbonSaved || 0, balance: 0, earnings: 0,
-            last_active_at: u.lastSubmission || '', status: u.status || '',
-            device_no: u.deviceNo || '', machine_location: u.machineLocation || '',
-            _source: 'vendor'
+            nickname: u.name || 'User', phone: u.phone || '',
+            email: '', total_weight: u.totalWeight || 0,
+            total_points: u.totalPoints || 0, balance: 0, earnings: 0,
+            last_active_at: u.lastSeen || '', status: 'active',
+            _source: 'merged'
           }));
           loading.value = false; return;
         }
