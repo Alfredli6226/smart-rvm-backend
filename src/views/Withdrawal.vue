@@ -174,8 +174,29 @@ const showModal = ref(false);
 const selectedWithdrawal = ref<Withdrawal | null>(null);
 const showExportModal = ref(false);
 
+// User withdrawal history for the detail modal
+const userWithdrawalHistory = ref<Withdrawal[]>([]);
+
+// Flatten bundled withdrawals into individual records for history
+const allIndividualWithdrawals = computed(() => {
+  const items: any[] = [];
+  for (const w of withdrawals.value) {
+    if (w.is_bundled && w.sub_withdrawals) {
+      items.push(...w.sub_withdrawals);
+    } else {
+      items.push(w);
+    }
+  }
+  return items;
+});
+
 const openDetails = (w: Withdrawal) => {
   selectedWithdrawal.value = w;
+  // Compute user's past withdrawals (exclude current one)
+  const currentIds = new Set(w.bundled_ids || [w.id]);
+  userWithdrawalHistory.value = allIndividualWithdrawals.value
+    .filter((item: any) => item.user_id === w.user_id && !currentIds.has(item.id))
+    .slice(0, 20); // Show last 20
   showModal.value = true;
 };
 
@@ -372,6 +393,7 @@ watch(() => auth.role, (newRole) => {
     <WithdrawalDetailsModal 
       :isOpen="showModal" 
       :withdrawal="selectedWithdrawal" 
+      :userWithdrawalHistory="userWithdrawalHistory"
       @close="showModal = false" 
       @update-status="(id, status) => updateStatus(id, status)"
     />

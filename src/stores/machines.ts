@@ -74,20 +74,43 @@ export const useMachineStore = defineStore('machines', () => {
       const res = await fetch('/api/machines');
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
-        const live = data.data.map((m: any, i: number) => ({
-          id: i + 1,
-          deviceNo: m.device_no || '',
-          name: m.name || m.device_no || '',
-          address: m.address || '',
-          zone: 'General',
-          maintenanceContact: 'Unassigned',
-          googleMapsUrl: m.latitude && m.longitude ? `https://maps.google.com/?q=${m.latitude},${m.longitude}` : '#',
-          isOnline: m.is_online === true,
-          isManualOffline: false,
-          statusText: m.is_online ? 'Online' : 'Offline',
-          statusCode: m.is_online ? 2 : 0,
-          compartments: [{ label: 'Recycling', color: 'bg-green-100 text-green-800', weight: '0', percent: 0, isFull: false }]
-        }));
+        const live = data.data.map((m: any, i: number) => {
+          // Map real bin data from API response instead of hardcoding to zero
+          const compartments = (m.compartments || []).map((c: any) => {
+            const labelInfo = mapTypeToLabel(c.label || '');
+            return {
+              label: labelInfo.label,
+              color: labelInfo.color,
+              weight: String(c.weight || '0'),
+              percent: Number(c.percent) || 0,
+              isFull: c.isFull === true || c.isFull === 'true'
+            };
+          });
+          // Fallback: if API returned no compartments, show one default
+          if (compartments.length === 0) {
+            compartments.push({
+              label: 'Recycling',
+              color: 'bg-green-100 text-green-800',
+              weight: '0',
+              percent: 0,
+              isFull: false
+            });
+          }
+          return {
+            id: i + 1,
+            deviceNo: m.device_no || '',
+            name: m.name || m.device_no || '',
+            address: m.address || '',
+            zone: 'General',
+            maintenanceContact: 'Unassigned',
+            googleMapsUrl: m.latitude && m.longitude ? `https://maps.google.com/?q=${m.latitude},${m.longitude}` : '#',
+            isOnline: m.is_online === true,
+            isManualOffline: false,
+            statusText: m.is_online ? 'Online' : 'Offline',
+            statusCode: m.is_online ? 2 : 0,
+            compartments
+          };
+        });
         machines.value = live;
         lastUpdated.value = now;
         localStorage.setItem(CACHE_KEY, JSON.stringify(live));

@@ -1,5 +1,5 @@
 // ===== User Analytics — Real-time from Vendor API =====
-import { fetchAllIntegralRecords, fetchRecentIntegralRecords, integralToWeight, score, classifyWasteType, fetchVendorDevices, getCategory } from './vendor-live.js';
+import { fetchAllIntegralRecords, fetchRecentIntegralRecords, integralToWeight, score, classifyWasteType, fetchVendorDevices, getCategory } from '../lib/vendor-live.js';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
@@ -342,7 +342,7 @@ function calcESGImpact(weight) {
 }
 
 async function handleCertificate(req, res) {
-  const { fetchAllIntegralRecords, integralToWeight, fetchVendorDevices } = await import('./vendor-live.js');
+  const { fetchAllIntegralRecords, integralToWeight, fetchVendorDevices } = await import('../lib/vendor-live.js');
   const [records, devices] = await Promise.all([
     fetchAllIntegralRecords(70),
     fetchVendorDevices().catch(() => [])

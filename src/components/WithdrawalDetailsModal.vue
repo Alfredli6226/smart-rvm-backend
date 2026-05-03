@@ -3,64 +3,135 @@ import { ref, watch, computed } from 'vue';
 import { 
   X, User, Building, 
   ShieldAlert, ShieldCheck, CheckCircle2, 
-  AlertTriangle, RefreshCw, Lock 
+  AlertTriangle, RefreshCw, Lock, Clock, History, DollarSign
 } from 'lucide-vue-next';
 
 const props = defineProps<{
   isOpen: boolean;
   withdrawal: any; 
+  userWithdrawalHistory?: any[];
 }>();
 
 const emit = defineEmits(['close', 'update-status']);
 
 const hasManualDeduction = ref(false);
 const isAuditing = ref(false);
-const auditResult = ref<any>(null); // Stores the API result from /api/batch-sync-balance
+const auditResult = ref<any>(null);
+const vendorBalance = ref<number | null>(null);
+const vendorCheckError = ref<string>('');
+const isDeducting = ref(false);
+const deductError = ref<string>('');
 
 // Reset state when modal opens or withdrawal changes
 watch(() => props.withdrawal, () => {
     hasManualDeduction.value = false;
     auditResult.value = null; 
     isAuditing.value = false;
+    vendorBalance.value = null;
+    vendorCheckError.value = '';
 });
 
-// Logic: Does the user still have enough points after the audit?
+// Calculated local balance (earned - withdrawn)
+const localBalance = computed(() => {
+    const user = props.withdrawal?.users || {};
+    const earned = parseFloat((user as any).total_earned || 0);
+    const withdrawn = parseFloat((user as any).total_withdrawn || 0);
+    return earned - withdrawn;
+});
+
+// Compare vendor vs local
+const balanceDifference = computed(() => {
+    if (vendorBalance.value === null) return null;
+    return vendorBalance.value - localBalance.value;
+});
+
+const balanceStatus = computed(() => {
+    if (vendorBalance.value === null) return 'pending';
+    const diff = Math.abs(balanceDifference.value || 0);
+    if (diff < 0.01) return 'matched';
+    if (diff > 5) return 'warning';
+    return 'minor';
+});
+
 const sufficientFunds = computed(() => {
-    // If we haven't audited yet, we assume it's unsafe to approve
     if (!auditResult.value) return false; 
-    
-    // If Audit returned 'RISK_DETECTED', we check the new adjusted balance
     if (auditResult.value.status === 'RISK_DETECTED') {
         return auditResult.value.newLocalBalance >= props.withdrawal.amount;
     }
-    
-    // If 'MATCHED' or other safe status, funds are sufficient
     return true; 
 });
 
 const runAudit = async () => {
     isAuditing.value = true;
+    vendorBalance.value = null;
+    vendorCheckError.value = '';
     try {
-        const response = await fetch('/api/batch-sync-balance', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                userId: props.withdrawal.user_id, 
-                phone: props.withdrawal.users?.phone 
-            })
-        });
-        auditResult.value = await response.json();
+        // First: check vendor balance
+        const phone = props.withdrawal?.users?.phone || '';
+        const userId = props.withdrawal.user_id;
+        
+        const vendorRes = await fetch('/api/data-sync?action=check-balance&userId=' + encodeURIComponent(userId || '') + '&phone=' + encodeURIComponent(phone || ''));
+        const vendorData = await vendorRes.json();
+        
+        if (vendorData.success) {
+            vendorBalance.value = vendorData.vendorBalance;
+        } else {
+            vendorCheckError.value = vendorData.error || 'Vendor check failed';
+        }
+        
+        // Calculate local balance from available data
+        const withdrawalAmount = parseFloat(props.withdrawal.amount || 0);
+        const vendorBal = vendorBalance.value || 0;
+        
+        if (vendorBal >= withdrawalAmount) {
+            auditResult.value = { status: 'MATCHED', newLocalBalance: vendorBal };
+        } else {
+            auditResult.value = { status: 'RISK_DETECTED', newLocalBalance: vendorBal };
+        }
     } catch (e) {
         console.error(e);
         auditResult.value = { status: 'ERROR', msg: 'Audit connection failed' };
+        vendorCheckError.value = e.message || 'Connection error';
     } finally {
         isAuditing.value = false;
     }
 };
 
-const handleApprove = () => {
-    emit('update-status', props.withdrawal.id, 'APPROVED');
-    emit('close');
+const handleApprove = async () => {
+    isDeducting.value = true;
+    deductError.value = '';
+    try {
+        // Auto-deduct points on vendor side via proxy
+        const userId = props.withdrawal.user_id;
+        const amount = parseFloat(props.withdrawal.amount || 0);
+        
+        const res = await fetch('/api/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                endpoint: '/system/integral/set/2',
+                method: 'PUT',
+                body: {
+                    integralNum: amount,
+                    remark: 'Withdrawal approval - admin deduct',
+                    userId: parseInt(userId) || userId
+                }
+            })
+        });
+        const data = await res.json();
+        
+        if (data.code === 200) {
+            // Deduction successful, proceed with approval
+            emit('update-status', props.withdrawal.id, 'APPROVED');
+            emit('close');
+        } else {
+            deductError.value = data.msg || 'Vendor deduction failed';
+        }
+    } catch (e) {
+        deductError.value = e.message || 'Connection error';
+    } finally {
+        isDeducting.value = false;
+    }
 };
 
 const handleReject = () => {
@@ -139,10 +210,37 @@ const handleReject = () => {
           </div>
         </div>
 
+        <!-- User Withdrawal History -->
+        <div v-if="userWithdrawalHistory && userWithdrawalHistory.length > 0" class="space-y-3">
+          <h4 class="flex items-center gap-2 text-sm font-bold text-gray-900 border-b pb-2">
+            <History :size="16" class="text-purple-500"/> Withdrawal History ({{ userWithdrawalHistory.length }})
+          </h4>
+          <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+            <div v-for="h in userWithdrawalHistory" :key="h.id" 
+                 class="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+              <div class="flex items-center gap-3">
+                <Clock :size="12" class="text-gray-400 flex-shrink-0" />
+                <span class="text-gray-500 font-mono">{{ new Date(h.created_at).toLocaleDateString() }}</span>
+                <span class="text-gray-400">{{ new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="font-bold text-gray-800">{{ h.amount }} pts</span>
+                <span :class="`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  h.status === 'APPROVED' || h.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                  h.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                  'bg-amber-100 text-amber-700'
+                }`">
+                  {{ h.status === 'APPROVED' || h.status === 'PAID' ? 'Paid' : h.status === 'REJECTED' ? 'Rejected' : 'Pending' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div v-if="withdrawal.status === 'PENDING'" class="space-y-4">
             
             <h4 class="flex items-center gap-2 text-sm font-bold text-gray-900 border-b pb-2">
-                <ShieldCheck :size="16" class="text-blue-600"/> Financial Safety Check
+                <DollarSign :size="16" class="text-blue-600"/> Vendor Balance Check
             </h4>
 
             <div v-if="!auditResult" class="text-center bg-gray-50 rounded-xl p-5 border border-dashed border-gray-300">
@@ -160,6 +258,39 @@ const handleReject = () => {
             </div>
 
             <div v-else class="animate-in fade-in zoom-in-95 duration-200">
+
+                <!-- Vendor vs Local Balance Comparison -->
+                <div v-if="vendorBalance !== null" :class="`p-4 rounded-xl border mb-4 flex items-start ${
+                  balanceStatus === 'matched' ? 'bg-green-50 border-green-200' :
+                  balanceStatus === 'warning' ? 'bg-red-50 border-red-200' :
+                  'bg-amber-50 border-amber-200'
+                }`">
+                    <ShieldCheck v-if="balanceStatus === 'matched'" class="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <AlertTriangle v-else class="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div class="flex-1">
+                        <h5 class="text-sm font-bold" :class="balanceStatus === 'matched' ? 'text-green-800' : 'text-amber-800'">
+                            Balance Check {{ balanceStatus === 'matched' ? '✓ Matched' : '⚠ Difference Found' }}
+                        </h5>
+                        <div class="grid grid-cols-2 gap-3 mt-2 text-xs">
+                            <div class="bg-white rounded-lg p-2 border">
+                                <span class="text-gray-500">Vendor App Balance</span>
+                                <div class="font-bold text-gray-900 text-sm">{{ vendorBalance.toFixed(2) }} pts</div>
+                            </div>
+                            <div class="bg-white rounded-lg p-2 border">
+                                <span class="text-gray-500">Our System Balance</span>
+                                <div class="font-bold text-gray-900 text-sm">{{ localBalance.toFixed(2) }} pts</div>
+                            </div>
+                        </div>
+                        <div v-if="balanceStatus !== 'matched'" class="mt-2 text-xs">
+                            <span class="font-medium text-amber-700">
+                                Difference: {{ balanceDifference?.toFixed(2) }} pts
+                            </span>
+                            <span class="text-gray-500 ml-1">
+                                (system {{ (balanceDifference || 0) > 0 ? 'under' : 'over' }}-reported)
+                            </span>
+                        </div>
+                    </div>
+                </div>
                 
                 <div v-if="!sufficientFunds" class="bg-red-50 p-4 rounded-xl border border-red-200 mb-4 flex items-start">
                     <ShieldAlert class="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
@@ -211,12 +342,17 @@ const handleReject = () => {
                         <button @click="handleReject" class="flex-1 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50">
                             Reject
                         </button>
+                        <div v-if="deductError" class="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2 mb-2">
+                            {{ deductError }}
+                        </div>
                         <button 
                             @click="handleApprove"
-                            :disabled="!hasManualDeduction"
-                            :class="['flex-1 py-2 text-white font-medium rounded-lg transition-all flex items-center justify-center shadow-sm', hasManualDeduction ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed']"
+                            :disabled="!hasManualDeduction || isDeducting"
+                            :class="['flex-1 py-2 text-white font-medium rounded-lg transition-all flex items-center justify-center shadow-sm', (hasManualDeduction && !isDeducting) ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed']"
                         >
-                            <CheckCircle2 :size="16" class="mr-2" /> Approve & Pay
+                            <CheckCircle2 v-if="!isDeducting" :size="16" class="mr-2" />
+                            <RefreshCw v-else :size="16" class="mr-2 animate-spin" />
+                            {{ isDeducting ? 'Deducting Points...' : 'Approve & Pay' }}
                         </button>
                     </div>
                 </div>

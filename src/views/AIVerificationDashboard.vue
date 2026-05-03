@@ -384,7 +384,7 @@ const checkDataConnection = async () => {
 const users = ref<User[]>([
   {
     id: 'user_001',
-    name: 'EcoWarrior',
+    name: 'User',
     initials: 'EW',
     score: 100,
     trustLevel: 'PLATINUM',
@@ -393,7 +393,7 @@ const users = ref<User[]>([
   },
   {
     id: 'user_002',
-    name: 'GreenHero',
+    name: 'User',
     initials: 'GH',
     score: 100,
     trustLevel: 'PLATINUM',

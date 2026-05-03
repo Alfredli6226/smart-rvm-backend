@@ -1,5 +1,5 @@
 // ===== Notifications & Alerts — Real-time from Vendor API =====
-import { fetchAllIntegralRecords, fetchRecentIntegralRecords, integralToWeight, score, fetchVendorDevices } from './vendor-live.js';
+import { fetchAllIntegralRecords, fetchRecentIntegralRecords, integralToWeight, score, fetchVendorDevices } from '../lib/vendor-live.js';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;

@@ -95,13 +95,16 @@ function normalizeVendorUser(user: UserRow) {
     deviceNo: user.deviceNo || user.device_no || '',
     status: String(user.status ?? '0'),
     createTime: user.createTime || user.created_at || null,
-    total_weight: num(ui.amount ?? user.totalWeight ?? user.total_weight),
-    total_points: num(ui.pointsBalance ?? user.totalPoints ?? user.total_points)
+    total_weight: num(user._local_weight ?? ui.amount ?? user.totalWeight ?? user.total_weight),
+    total_points: num(ui.pointsBalance ?? user.totalPoints ?? user.total_points),
+    balance: num(user._local_balance || 0),
+    total_earned: num(user._local_earned || 0),
+    total_withdrawn: num(user._local_withdrawn || 0),
+    review_count: user._local_review_count || 0
   };
 }
 
-async function getVendorUsers(pageNum = 1, pageSize = 20) {
-  // Vendor /system/user/list requires userType=11 param
+async function getVendorUsers(pageNum = 1, pageSize = 20, supabase?: ReturnType<typeof createSupabase>) {
   const data = await callVendorAPI('/system/user/list', { userType: 11, pageNum, pageSize });
   const rows = Array.isArray(data?.rows)
     ? data.rows
@@ -114,9 +117,62 @@ async function getVendorUsers(pageNum = 1, pageSize = 20) {
           : [];
 
   const total = num(data?.total ?? data?.count ?? rows.length);
+
+  // Merge local data (submission_reviews, withdrawals) for real weight & balance
+  let localData: Record<string, any> = {};
+  if (supabase) {
+    const userIds = rows.map((r: any) => String(r.userId || '')).filter(Boolean);
+    try {
+      const [reviewRes, withdrawalRes] = await Promise.all([
+        supabase.from('submission_reviews').select('user_id,api_weight,calculated_value,points_awarded,status').in('user_id', userIds),
+        supabase.from('withdrawals').select('user_id,amount,status').in('user_id', userIds)
+      ]);
+      const reviewsByUser: Record<string, { totalWeight: number; totalEarned: number; count: number }> = {};
+      for (const r of (reviewRes.data || [])) {
+        const uid = String(r.user_id);
+        if (!reviewsByUser[uid]) reviewsByUser[uid] = { totalWeight: 0, totalEarned: 0, count: 0 };
+        if (String(r.status || '').toUpperCase() === 'VERIFIED') {
+          reviewsByUser[uid].totalWeight += num(r.api_weight);
+          // Use calculated_value if available, otherwise fall back to points_awarded
+          const earned = num(r.calculated_value) || num(r.points_awarded) || 0;
+          reviewsByUser[uid].totalEarned += earned;
+          reviewsByUser[uid].count++;
+        }
+      }
+      const withdrawalsByUser: Record<string, number> = {};
+      for (const w of (withdrawalRes.data || [])) {
+        const uid = String(w.user_id);
+        if (!withdrawalsByUser[uid]) withdrawalsByUser[uid] = 0;
+        if (String(w.status || '').toUpperCase() !== 'REJECTED') {
+          withdrawalsByUser[uid] += num(w.amount);
+        }
+      }
+      for (const uid of userIds) {
+        const r = reviewsByUser[uid] || { totalWeight: 0, totalEarned: 0, count: 0 };
+        const withdrawn = withdrawalsByUser[uid] || 0;
+        localData[uid] = {
+          _local_weight: r.totalWeight,
+          _local_earned: r.totalEarned,
+          _local_withdrawn: withdrawn,
+          _local_balance: r.totalEarned - withdrawn,
+          _local_review_count: r.count
+        };
+      }
+    } catch (e) {
+      console.warn('Could not fetch local data for vendor users:', e);
+    }
+  }
+
+  // Attach local data to vendor rows before normalization
+  const enriched = rows.map((r: any) => {
+    const uid = String(r.userId || '');
+    if (localData[uid]) Object.assign(r, localData[uid]);
+    return r;
+  });
+
   return {
     source: 'vendor_api',
-    data: rows.map(normalizeVendorUser),
+    data: enriched.map(normalizeVendorUser),
     total,
     pages: pageSize > 0 ? Math.ceil(total / pageSize) : 1,
     hasNextPage: pageNum * pageSize < total
@@ -134,7 +190,7 @@ function buildUserStats(user: UserRow) {
   const wallets: WalletRow[] = Array.isArray(user.merchant_wallets) ? user.merchant_wallets : [];
 
   const verifiedReviews = reviews.filter((review) => String(review.status || '').toUpperCase() === 'VERIFIED');
-  const totalEarned = verifiedReviews.reduce((sum, review) => sum + num(review.calculated_value), 0);
+  const totalEarned = verifiedReviews.reduce((sum, review) => sum + (num(review.calculated_value) || num(review.points_awarded) || 0), 0);
   const totalWithdrawn = withdrawals
     .filter((withdrawal) => String(withdrawal.status || '').toUpperCase() !== 'REJECTED')
     .reduce((sum, withdrawal) => sum + num(withdrawal.amount), 0);
@@ -168,17 +224,20 @@ function buildUserStats(user: UserRow) {
   };
 }
 
-async function fetchSupabaseUsers(supabase: ReturnType<typeof createSupabase>, offset: number, limit: number) {
+async function fetchSupabaseUsers(supabase: ReturnType<typeof createSupabase>, offset: number, limit: number, orderBy?: string) {
   if (!supabase) return { rows: [], total: 0 };
 
-  // Fetch users without embedded relationships to avoid schema cache issues
-  const { data, count, error } = await supabase
-    .from('users')
-    .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (error) throw error;
+  let query = supabase.from('users').select('*', { count: 'exact' });
+  
+  if (orderBy === 'total_weight') {
+    query = query.order('total_weight', { ascending: false });
+  } else {
+    query = query.order('created_at', { ascending: false });
+  }
+  
+  query = query.range(offset, offset + limit - 1);
+  
+  const { data, count, error } = await query;
 
   // Fetch related data in separate queries
   const userIds = (data || []).map((u: any) => u.user_id || u.id).filter(Boolean);
@@ -272,8 +331,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let source = 'supabase';
 
       try {
-        if (canUseVendorApi()) {
-          const vendorUsers = await getVendorUsers(pageNum, limit);
+        if (filterType === 'top_recyclers' && supabase) {
+          // For top recyclers, query Supabase directly (vendor API returns newest first)
+          const result = await fetchSupabaseUsers(supabase, offset, limit, 'total_weight');
+          users = result.rows;
+          total = result.total;
+          source = 'supabase_recyclers';
+        } else if (canUseVendorApi()) {
+          const vendorUsers = await getVendorUsers(pageNum, limit, supabase);
           users = vendorUsers.data;
           total = vendorUsers.total;
           source = vendorUsers.source;
@@ -317,8 +382,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let source = 'supabase';
 
       try {
-        if (canUseVendorApi()) {
-          const vendorUsers = await getVendorUsers(1, Math.max(100, offset + limit));
+        if (filterType === 'top_recyclers' && supabase) {
+          const result = await fetchSupabaseUsers(supabase, 0, Math.max(100, offset + limit), 'total_weight');
+          users = result.rows;
+          source = 'supabase_recyclers';
+        } else if (canUseVendorApi()) {
+          const vendorUsers = await getVendorUsers(1, Math.max(100, offset + limit), supabase);
           users = vendorUsers.data;
           source = vendorUsers.source;
         } else if (supabase) {

@@ -45,11 +45,19 @@ export default async function handler(req, res) {
         Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
       }
       vendorRes = await fetch(url.toString(), { headers });
+    } else if (method === 'DELETE') {
+      // DELETE with optional body
+      const opts = { method: 'DELETE', headers };
+      if (body) {
+        headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      vendorRes = await fetch(url.toString(), opts);
     } else {
-      // POST with JSON body
+      // POST, PUT, PATCH with JSON body
       headers['Content-Type'] = 'application/json';
       vendorRes = await fetch(url.toString(), {
-        method: 'POST',
+        method: method || 'POST',
         headers,
         body: JSON.stringify(body || {})
       });

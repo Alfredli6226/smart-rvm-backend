@@ -110,7 +110,9 @@ export function useUserList() {
             id: u.userId || i, user_id: u.userId || '',
             nickname: u.name || 'User', phone: u.phone || '',
             email: '', total_weight: u.totalWeight || 0,
-            total_points: u.totalPoints || 0, balance: 0, earnings: 0,
+            total_points: u.totalPoints || 0,
+            balance: u.balance || 0,
+            earnings: u.balance || 0,
             last_active_at: u.lastSeen || '', status: 'active',
             _source: 'merged'
           }));

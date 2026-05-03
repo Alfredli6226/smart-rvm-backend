@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   }
   
   if (req.query.action === 'rates') {
-    const { RECYCLING_RATES } = await import('./vendor-live.js');
+    const { RECYCLING_RATES } = await import('../lib/vendor-live.js');
     return res.status(200).json({
       success: true,
       rates: RECYCLING_RATES,

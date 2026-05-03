@@ -240,6 +240,131 @@ export default async function handler(req, res) {
           local_machines: mc || 0
         });
       }
+      case 'sync-refunds': {
+        // Sync refund/withdrawal records from vendor API
+        // Endpoint: /refund/record/v2 (returns refund records with refundIntegral)
+        const allRefundRecords = [];
+        let rp = 1;
+        while (true) {
+          const r = await vGet('/refund/record/v2', { pageNum: rp, pageSize: 50 });
+          if (!r.data) break;
+          const records = r.data.records || [];
+          if (records.length === 0) break;
+          allRefundRecords.push(...records);
+          if (records.length < 50) break;
+          rp++;
+        }
+        
+        if (allRefundRecords.length === 0) {
+          return res.status(200).json({ success: true, synced: 0, total: 0, msg: 'No refund records found' });
+        }
+
+        // Fetch all users from Supabase for device number matching
+        const { data: dbUsers } = await supabase.from('users').select('user_id,phone');
+        const userLookup = {};
+        for (const u of (dbUsers || [])) {
+          if (u.phone) userLookup[u.phone] = u.user_id;
+        }
+
+        let synced = 0;
+        for (const rec of allRefundRecords) {
+          try {
+            const integral = parseFloat(rec.refundIntegral || 0);
+            if (integral <= 0) continue;
+            
+            // Map refund record to withdrawal format
+            const withdrawal = {
+              user_id: rec.userId || rec.createBy || '',
+              amount: integral,
+              status: rec.refundStatus === 1 ? 'APPROVED' : rec.refundStatus === 0 ? 'PENDING' : 'REJECTED',
+              bank_name: 'System Refund',
+              account_number: '',
+              account_holder_name: '',
+              admin_note: `Auto-synced from vendor refund #${rec.applyNo || rec.id}`,
+              created_at: rec.createTime ? new Date(rec.createTime).toISOString() : new Date().toISOString()
+            };
+            
+            // Try to find user_id from order lookup or use createBy as fallback
+            if (!withdrawal.user_id) {
+              withdrawal.user_id = 'unknown_' + (rec.deviceNo || rec.id);
+            }
+            
+            // Upsert to avoid duplicates (check by applyNo)
+            const { data: existing } = await supabase
+              .from('withdrawals')
+              .select('id')
+              .eq('admin_note', withdrawal.admin_note)
+              .maybeSingle();
+            
+            if (!existing) {
+              await supabase.from('withdrawals').insert(withdrawal);
+              synced++;
+            }
+          } catch (e) {
+            console.error('Refund sync error:', e.message);
+          }
+        }
+        
+        return res.status(200).json({
+          success: true,
+          synced,
+          total: allRefundRecords.length,
+          msg: `${synced} refund records synced from ${allRefundRecords.length} total`
+        });
+      }
+      case 'check-balance': {
+        // Check a user's vendor pointsBalance for auditing
+        const checkUserId = req.query.userId || '';
+        const checkPhone = req.query.phone || '';
+        
+        if (!checkUserId && !checkPhone) {
+          return res.status(400).json({ success: false, error: 'userId or phone required' });
+        }
+
+        let vendorBalance = 0;
+        let vendorSource = '';
+
+        if (checkPhone) {
+          // Use account sync API to get live balance
+          const r = await vGet('/api/open/v1/user/account/sync', { phone: checkPhone });
+          if (r.ok && r.data?.code === 200 && r.data?.data) {
+            vendorBalance = parseFloat(r.data.data.integral || 0);
+            vendorSource = 'account_sync';
+          }
+        } else if (checkUserId) {
+          const r = await vGet('/system/user/list', { userType: 11, pageNum: 1, pageSize: 50, userId: checkUserId });
+          if (r.ok && r.data?.rows) {
+            for (const u of r.data.rows) {
+              if (String(u.userId) === String(checkUserId)) {
+                vendorBalance = parseFloat(u.userInfo?.pointsBalance || 0);
+                vendorSource = 'user_list';
+                break;
+              }
+            }
+          }
+        }
+        
+        return res.status(200).json({
+          success: true,
+          userId: checkUserId,
+          phone: checkPhone,
+          vendorBalance,
+          vendorSource
+        });
+      }
+      case 'order-list': {
+        const or = await vGet('/system/order/v2/list', { pageNum: req.query.page || 1, pageSize: req.query.limit || 20 });
+        return res.json(or);
+      }
+      case 'cleaning-records': {
+        const cr = await vGet('/system/rubbish/clear', { 
+          pageNum: req.query.page || 1, 
+          pageSize: req.query.limit || 20,
+          ...(req.query.deviceNo ? { deviceNo: req.query.deviceNo } : {}),
+          ...(req.query.userId ? { userId: req.query.userId } : {})
+        });
+        return res.json(cr);
+      }
       default:
         return res.status(400).json({ error: `Unknown action: ${action}` });
     }
