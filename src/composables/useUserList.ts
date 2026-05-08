@@ -1,4 +1,5 @@
 import { ref, onMounted } from 'vue';
+import { supabase } from '../services/supabase';
 import { proxy, proxySelect, proxyUpdate, proxyInsert, proxyDelete, proxyUpsert } from '../services/supabaseProxy';
 import { useAuthStore } from '../stores/auth';
 import axios from 'axios';
@@ -10,22 +11,11 @@ export function useUserList() {
   const isSubmitting = ref(false);
 
   async function fetchMerchantScopedUsers(merchantId: string) {
+    // Use direct supabase client (frontend VITE env vars work correctly)
     const [walletsRes, withdrawalsRes, reviewsRes] = await Promise.all([
-      proxySelect('merchant_wallets', {
-        select: 'id,user_id,merchant_id,current_balance,total_earnings,total_weight',
-        eq: { merchant_id: merchantId },
-        limit: 10000,
-      }),
-      proxySelect('withdrawals', {
-        select: 'id,user_id,merchant_id,amount,status,created_at',
-        eq: { merchant_id: merchantId },
-        limit: 10000,
-      }),
-      proxySelect('submission_reviews', {
-        select: 'id,user_id,merchant_id,calculated_value,status,api_weight,submitted_at,created_at',
-        eq: { merchant_id: merchantId },
-        limit: 10000,
-      }),
+      supabase.from('merchant_wallets').select('id,user_id,merchant_id,current_balance,total_earnings,total_weight').eq('merchant_id', merchantId).limit(10000),
+      supabase.from('withdrawals').select('id,user_id,merchant_id,amount,status,created_at').eq('merchant_id', merchantId).limit(10000),
+      supabase.from('submission_reviews').select('id,user_id,merchant_id,calculated_value,status,api_weight,submitted_at,created_at').eq('merchant_id', merchantId).limit(10000),
     ]);
 
     const wallets = walletsRes.data || [];
@@ -43,11 +33,11 @@ export function useUserList() {
       return;
     }
 
-    const { data, error } = await proxy.from('users')
+    const { data, error } = await supabase
+      .from('users')
       .select('*')
-      .in('id', userIds)
-      .order('created_at', { ascending: false })
-      .run('select');
+      .in('user_id', userIds)
+      .order('created_at', { ascending: false });
 
     if (error) throw new Error(error);
 
@@ -99,94 +89,71 @@ export function useUserList() {
   }
 
   const fetchUsers = async () => {
-    // Use user-sync API (merges vendor integral records with Supabase names)
     loading.value = true;
     try {
-      const r = await fetch('/api/user-sync?action=list');
-      if (r.ok) {
-        const d = await r.json();
-        if (d.success && Array.isArray(d.users) && d.users.length > 0) {
-          users.value = d.users.map((u, i) => ({
-            id: u.userId || i, user_id: u.userId || '',
-            nickname: u.name || 'User', phone: u.phone || '',
-            email: '', total_weight: u.totalWeight || 0,
-            total_points: u.totalPoints || 0,
-            balance: u.balance || 0,
-            earnings: u.balance || 0,
-            last_active_at: u.lastSeen || '', status: 'active',
-            _source: 'merged'
-          }));
-          loading.value = false; return;
+      // Direct Supabase query (frontend client uses VITE_SUPABASE_URL which is correct)
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (usersError) throw new Error(usersError.message);
+      if (!usersData || usersData.length === 0) { users.value = []; return; }
+
+      // Fetch submission_reviews to calculate actual weight and points
+      const { data: submissions } = await supabase
+        .from('submission_reviews')
+        .select('user_id,api_weight,points_awarded,status,calculated_value')
+        .limit(10000);
+
+      // Fetch withdrawals for balance calculation
+      const { data: withdrawals } = await supabase
+        .from('withdrawals')
+        .select('user_id,amount,status')
+        .limit(10000);
+
+      // Aggregate submissions by user
+      const subTotals: Record<string, { weight: number; points: number }> = {};
+      if (submissions) {
+        for (const s of submissions) {
+          if (!s.user_id) continue;
+          if (!subTotals[s.user_id]) subTotals[s.user_id] = { weight: 0, points: 0 };
+          subTotals[s.user_id].weight += Number(s.api_weight || 0);
+          subTotals[s.user_id].points += Number(s.points_awarded || 0);
         }
       }
-    } catch(e) { console.warn('user-sync API failed', e); }
-    
-    const isPlatformOwner = auth.role === 'SUPER_ADMIN' && !auth.merchantId;
-    const isViewer = auth.role === 'VIEWER';
-    if (!auth.merchantId && !isPlatformOwner && !isViewer) return;
-    loading.value = true;
-    try {
-      if (auth.merchantId) {
-        await fetchMerchantScopedUsers(auth.merchantId);
-        return;
+
+      // Aggregate withdrawals by user
+      const withdrawTotals: Record<string, number> = {};
+      if (withdrawals) {
+        for (const w of withdrawals) {
+          if (!w.user_id || w.status === 'REJECTED') continue;
+          withdrawTotals[w.user_id] = (withdrawTotals[w.user_id] || 0) + Number(w.amount || 0);
+        }
       }
 
-      const [usersRes, walletsRes] = await Promise.all([
-        proxy.from('users')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .run('select'),
-        proxy.from('merchant_wallets')
-          .select('user_id,current_balance,total_earnings,merchant_id,total_weight')
-          .limit(10000)
-          .run('select'),
-      ]);
-
-      if (usersRes.error) throw new Error(usersRes.error);
-      
-      // Fetch live vendor weights and merge with Supabase user data
-      let vendorWeights: Record<string, number> = {};
-      try {
-        const r = await fetch('/api/user-analytics?endpoint=active-recyclers&limit=200');
-        if (r.ok) {
-          const d = await r.json();
-          if (d.success && d.data) {
-            d.data.forEach((v: any) => {
-              if (v.userId) vendorWeights[v.userId] = v.totalRecycled || 0;
-              if (v.phone) vendorWeights[v.phone] = v.totalRecycled || 0;
-            });
-          }
-        }
-      } catch(e) {}
-
-      const wallets = walletsRes.data || [];
-
-      const walletsByUser = wallets.reduce((acc: any, row: any) => {
-        if (!acc[row.user_id]) acc[row.user_id] = [];
-        acc[row.user_id].push(row);
-        return acc;
-      }, {});
-
-      users.value = (usersRes.data || []).map((u: any) => {
-        const userWallets = walletsByUser[u.user_id] || [];
-        const walletWeight = userWallets.reduce((sum: number, w: any) => sum + Number(w.total_weight || 0), 0);
-        const walletBalance = userWallets.reduce((sum: number, w: any) => sum + Number(w.current_balance || 0), 0);
-        
-        // Prefer live vendor weight over stale wallet weight
-        const liveWeight = vendorWeights[u.user_id] || vendorWeights[u.phone] || 0;
-        const weight = liveWeight > 0 ? liveWeight : walletWeight;
-
+      users.value = usersData.map((u: any) => {
+        const subs = subTotals[u.user_id] || { weight: 0, points: 0 };
+        const withdrawn = withdrawTotals[u.user_id] || 0;
+        const balance = Math.max(0, subs.points - withdrawn);
         return {
           ...u,
-          merchant_wallets: userWallets,
-          nickname: u.nickname || u.nickName || u.full_name || u.phone,
-          balance: Number(walletBalance.toFixed(2)),
-          earnings: Number(walletBalance.toFixed(2)),
-          total_weight: Number(weight.toFixed(2)),
+          id: u.id,
+          nickname: u.nickname || u.nickName || u.full_name || u.phone || 'User',
+          total_weight: Number(subs.weight.toFixed(2)),
+          total_points: Number(subs.points.toFixed(2)),
+          balance: Number(balance.toFixed(2)),
+          earnings: Number(subs.points.toFixed(2)),
+          last_active_at: u.last_active_at || '',
+          status: u.status || 'active',
         };
       });
     } catch (err: any) {
       console.error('Error fetching users:', err.message);
+      // Fallback: proxy-based merchant-scoped query
+      if (auth.merchantId) {
+        try { await fetchMerchantScopedUsers(auth.merchantId); } catch {}
+      }
     } finally {
       loading.value = false;
     }
