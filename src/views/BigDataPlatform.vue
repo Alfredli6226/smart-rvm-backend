@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref, computed, onUnmounted } from 'vue';
 import { useBigDataStats } from '../composables/useBigDataStats';
 import BigDataMap from '../components/BigDataMap.vue';
 import BigDataChart from '../components/BigDataChart.vue';
 import { useESGExport } from '../composables/useESGExport';
 import SimpleConfirmModal from '../components/SimpleConfirmModal.vue';
+import { supabase } from '../services/supabase';
 import { 
   Users, Scale, Server, Activity, 
   Truck, Recycle, CheckCircle2, Coins,
-  RefreshCw, FileText
+  RefreshCw, FileText, MapPin, Bell, X
 } from 'lucide-vue-next';
 
 const { 
@@ -85,6 +86,7 @@ const refreshData = async () => {
 
 onMounted(() => {
   fetchInitialData(); // Initial load (shows full page spinner)
+  fetchEfficiencyStats(); // Load efficiency data for map
   
   // ❌ REMOVED: setInterval logic to prevent API blocking
 });
@@ -95,10 +97,174 @@ const formatNum = (n: number) => {
     maximumFractionDigits: 2 
   });
 };
+
+// Efficiency Stats
+interface EfficiencyData {
+  deviceNo: string;
+  name: string;
+  lat: number;
+  lng: number;
+  totalWeight: number;
+  totalPoints: number;
+  submissionCount: number;
+  efficiencyRatio: number;
+  performance: 'gold' | 'warning' | 'normal';
+}
+
+const efficiencyStats = ref<EfficiencyData[]>([]);
+const loadingEfficiency = ref(false);
+
+const fetchEfficiencyStats = async () => {
+  loadingEfficiency.value = true;
+  try {
+    const response = await fetch('/api/machines/efficiency-stats');
+    const result = await response.json();
+    
+    if (result.success && result.machines) {
+      efficiencyStats.value = result.machines.map((m: any) => ({
+        deviceNo: m.deviceNo,
+        name: m.name,
+        lat: m.lat,
+        lng: m.lng,
+        totalWeight: m.totalWeight,
+        totalPoints: m.totalPoints,
+        submissionCount: m.submissionCount,
+        efficiencyRatio: m.efficiencyRatio,
+        performance: m.performance
+      }));
+    }
+  } catch (e) {
+    console.error('Failed to fetch efficiency stats:', e);
+  } finally {
+    loadingEfficiency.value = false;
+  }
+};
+
+// Map control for flyTo
+const mapZoom = ref(6);
+const mapCenter = ref<[number, number]>([4.2105, 101.9758]);
+
+const handleFlyTo = (lat: number, lng: number) => {
+  mapCenter.value = [lat, lng];
+  mapZoom.value = 14;
+};
+
+// Live notification toast for new submissions
+interface SubmissionToast {
+  id: string;
+  machineName: string;
+  weight: number;
+  lat: number;
+  lng: number;
+  timestamp: Date;
+}
+
+const submissionToasts = ref<SubmissionToast[]>([]);
+let lastSubmissionId = '';
+
+const pollForNewSubmissions = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('submission_reviews')
+      .select('id, device_no, api_weight, machines(name, latitude, longitude)')
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    
+    if (error || !data?.length) return;
+    
+    const latest = data[0]!;
+    if (latest.id !== lastSubmissionId && lastSubmissionId) {
+      // New submission found!
+      const machine = latest.machines as any;
+      if (machine?.latitude && machine?.longitude) {
+        const toast: SubmissionToast = {
+          id: latest.id,
+          machineName: machine?.name || `RVM-${latest.device_no}`,
+          weight: latest.api_weight || 0,
+          lat: Number(machine.latitude),
+          lng: Number(machine.longitude),
+          timestamp: new Date()
+        };
+        submissionToasts.value.unshift(toast);
+        
+        // Auto-dismiss after 8 seconds
+        setTimeout(() => {
+          submissionToasts.value = submissionToasts.value.filter(t => t.id !== toast.id);
+        }, 8000);
+        
+        // Keep max 3 toasts
+        if (submissionToasts.value.length > 3) {
+          submissionToasts.value.pop();
+        }
+      }
+    }
+    lastSubmissionId = latest.id;
+  } catch (e) {
+    // Silent fail for polling
+  }
+};
+
+const flyToToast = (toast: SubmissionToast) => {
+  handleFlyTo(toast.lat, toast.lng);
+  submissionToasts.value = submissionToasts.value.filter(t => t.id !== toast.id);
+};
+
+const dismissToast = (id: string) => {
+  submissionToasts.value = submissionToasts.value.filter(t => t.id !== id);
+};
+
+let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+onMounted(() => {
+  fetchInitialData(); // Initial load (shows full page spinner)
+  
+  // Poll for new submissions every 10 seconds
+  pollInterval = setInterval(pollForNewSubmissions, 10000);
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
+});
 </script>
 
 <template>
   <div class="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 overflow-hidden">
+    
+    <!-- Live Submission Toasts -->
+    <div class="fixed top-20 right-4 z-[1000] flex flex-col gap-2">
+      <TransitionGroup name="toast">
+        <div 
+          v-for="toast in submissionToasts" 
+          :key="toast.id"
+          class="bg-white rounded-lg shadow-xl border border-emerald-200 p-3 min-w-[240px] animate-slide-in"
+        >
+          <div class="flex items-start gap-2">
+            <div class="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center shrink-0">
+              <Recycle :size="16" class="text-emerald-600" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1">
+                <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span class="text-[10px] text-emerald-600 font-bold uppercase">New Submission</span>
+              </div>
+              <div class="text-sm font-bold text-slate-800 truncate">{{ toast.machineName }}</div>
+              <div class="text-xs text-slate-500">{{ toast.weight }}kg received</div>
+            </div>
+            <button @click="dismissToast(toast.id)" class="text-slate-400 hover:text-slate-600">
+              <X :size="14" />
+            </button>
+          </div>
+          <button 
+            @click="flyToToast(toast)"
+            class="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 rounded transition-colors flex items-center justify-center gap-1"
+          >
+            <MapPin :size="12" />
+            View on Map
+          </button>
+        </div>
+      </TransitionGroup>
+    </div>
     
     <header class="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center shadow-sm z-20 h-16 shrink-0">
       <div class="flex items-center gap-3">
@@ -247,7 +413,11 @@ const formatNum = (n: number) => {
                     <div class="flex items-center gap-1 text-slate-400 font-bold text-sm"><span class="w-2 h-2 rounded-full bg-slate-300"></span> {{ offlineCount }} Offline</div>
                  </div>
               </div>
-              <BigDataMap :machines="filteredMapLocations" />
+              <BigDataMap 
+                :machines="filteredMapLocations" 
+                :efficiencyStats="efficiencyStats"
+                @flyTo="handleFlyTo"
+              />
            </div>
         </div>
 
@@ -407,4 +577,28 @@ const formatNum = (n: number) => {
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Toast Animations */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out forwards;
+}
+
+.toast-enter-active {
+  animation: slide-in 0.3s ease-out;
+}
+
+.toast-leave-active {
+  animation: slide-in 0.3s ease-out reverse;
+}
 </style>
