@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+const supabaseUrl = (process.env.SUPABASE_URL || '').trim();
 const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 const supabaseAnonKey = (
   process.env.SUPABASE_ANON_KEY ||
@@ -170,27 +170,13 @@ async function getAdminContext(req) {
   }
 
   const email = userData.user.email;
-  
-  // Try service role key first, fallback to anon key
-  let admin = null;
-  const adminClients = [supabase];
-  if (authClient && authClient !== supabase) adminClients.push(authClient);
-  
-  for (const client of adminClients) {
-    try {
-      const { data, error } = await client
-        .from('app_admins')
-        .select('role,merchant_id,email')
-        .eq('email', email)
-        .maybeSingle();
-      if (!error && data) {
-        admin = data;
-        break;
-      }
-    } catch (e) { /* try next */ }
-  }
-  
-  if (!admin) {
+  const { data: admin, error: adminError } = await supabase
+    .from('app_admins')
+    .select('role,merchant_id,email')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (adminError || !admin) {
     return { error: 'admin access required', status: 403 };
   }
 
@@ -233,53 +219,45 @@ export default async function handler(req, res) {
     switch (action) {
       // --- SELECT (simple queries) ---
       case 'select': {
-        // Try primary client first (service role), fallback to authClient (anon key)
-        const clients = [supabase];
-        if (authClient && authClient !== supabase) clients.push(authClient);
-        
-        for (const client of clients) {
-          try {
-            let query = client.from(table).select(params?.select || '*');
-            if (params?.count === true) {
-              query = query.select(params?.select || '*', { count: 'exact', head: params?.head ?? false });
-            }
-            if (params?.range) query = query.range(params.range[0], params.range[1]);
-            if (params?.order) query = query.order(params.order.column, { ascending: params.order.ascending ?? true, nullsFirst: params.order.nullsFirst ?? undefined });
-            if (params?.eq) {
-              for (const [col, val] of Object.entries(params.eq)) {
-                if (val !== null && val !== undefined) query = query.eq(col, val);
-              }
-            }
-            if (params?.neq) {
-              for (const [col, val] of Object.entries(params.neq)) {
-                query = query.neq(col, val);
-              }
-            }
-            if (params?.gte) {
-              for (const [col, val] of Object.entries(params.gte)) {
-                query = query.gte(col, val);
-              }
-            }
-            if (params?.lte) {
-              for (const [col, val] of Object.entries(params.lte)) {
-                query = query.lte(col, val);
-              }
-            }
-            if (params?.in) {
-              for (const [col, values] of Object.entries(params.in)) {
-                if (Array.isArray(values) && values.length > 0) {
-                  query = query.in(col, values);
-                }
-              }
-            }
-            if (params?.limit) query = query.limit(params.limit);
-            if (params?.single === true) query = query.single();
-            if (params?.maybeSingle === true) query = query.maybeSingle();
-            const { data, error, count } = await query;
-            if (!error) return res.json({ data, count });
-          } catch (e) { /* try next client */ }
+        let query = supabase.from(table).select(params?.select || '*');
+        if (params?.count === true) {
+          query = query.select(params?.select || '*', { count: 'exact', head: params?.head ?? false });
         }
-        return res.status(400).json({ error: 'All query attempts failed' });
+        if (params?.range) query = query.range(params.range[0], params.range[1]);
+        if (params?.order) query = query.order(params.order.column, { ascending: params.order.ascending ?? true, nullsFirst: params.order.nullsFirst ?? undefined });
+        if (params?.eq) {
+          for (const [col, val] of Object.entries(params.eq)) {
+            if (val !== null && val !== undefined) query = query.eq(col, val);
+          }
+        }
+        if (params?.neq) {
+          for (const [col, val] of Object.entries(params.neq)) {
+            query = query.neq(col, val);
+          }
+        }
+        if (params?.gte) {
+          for (const [col, val] of Object.entries(params.gte)) {
+            query = query.gte(col, val);
+          }
+        }
+        if (params?.lte) {
+          for (const [col, val] of Object.entries(params.lte)) {
+            query = query.lte(col, val);
+          }
+        }
+        if (params?.in) {
+          for (const [col, values] of Object.entries(params.in)) {
+            if (Array.isArray(values) && values.length > 0) {
+              query = query.in(col, values);
+            }
+          }
+        }
+        if (params?.limit) query = query.limit(params.limit);
+        if (params?.single === true) query = query.single();
+        if (params?.maybeSingle === true) query = query.maybeSingle();
+        const { data, error, count } = await query;
+        if (error) return res.status(400).json({ error: error.message });
+        return res.json({ data, count });
       }
 
       // --- INSERT ---
