@@ -169,7 +169,23 @@ async function getMonthly(res) {
 
   const devices = await fetchVendorDevices();
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  const { count: totalUsers } = await supabase.from('users').select('*', { count: 'exact', head: true });
+  let totalUsers = 0;
+  try {
+    // Try count query with service_role key
+    const countRes = await supabase.from('users').select('*', { count: 'exact', head: true });
+    if (countRes.count !== null) {
+      totalUsers = countRes.count;
+    }
+    // Fallback: query users table directly
+    if (!totalUsers) {
+      const { data: allUsers } = await supabase.from('users').select('user_id');
+      if (allUsers && allUsers.length > 0) {
+        totalUsers = allUsers.length;
+      }
+    }
+  } catch (e) {
+    console.warn('Reports count query failed:', e.message);
+  }
 
   // Waste type breakdown
   const wasteBreakdown = {};
