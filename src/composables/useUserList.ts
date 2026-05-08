@@ -100,23 +100,29 @@ export function useUserList() {
       if (usersError) throw new Error(usersError.message);
       if (!usersData || usersData.length === 0) { users.value = []; return; }
 
-      // Fetch merchant_wallets for official balance + weight (synced from vendor)
-      const { data: wallets } = await supabase
-        .from('merchant_wallets')
-        .select('user_id,current_balance,total_earnings,total_weight')
-        .limit(10000);
+      // Helper to fetch ALL records with pagination (anon key limit is 1000 per page)
+      async function fetchAllRows(table: string, select: string, pageSize = 1000) {
+        const allRows: any[] = [];
+        let from = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from(table as any)
+            .select(select)
+            .range(from, from + pageSize - 1);
+          if (error || !data || data.length === 0) break;
+          allRows.push(...data);
+          if (data.length < pageSize) break;
+          from += pageSize;
+        }
+        return allRows;
+      }
 
-      // Fetch submission_reviews for detailed weight/points breakdown
-      const { data: submissions } = await supabase
-        .from('submission_reviews')
-        .select('user_id,api_weight,points_awarded,status')
-        .limit(10000);
-
-      // Fetch withdrawals
-      const { data: withdrawals } = await supabase
-        .from('withdrawals')
-        .select('user_id,amount,status')
-        .limit(10000);
+      // Fetch ALL wallets, submissions, withdrawals (paginated to overcome 1000-row limit)
+      const [wallets, submissions, withdrawals] = await Promise.all([
+        fetchAllRows('merchant_wallets', 'user_id,current_balance,total_earnings,total_weight'),
+        fetchAllRows('submission_reviews', 'user_id,api_weight,points_awarded,status'),
+        fetchAllRows('withdrawals', 'user_id,amount,status'),
+      ]);
 
       // Aggregate wallets by user (prefer the first wallet with data)
       const walletMap: Record<string, { balance: number; weight: number }> = {};
