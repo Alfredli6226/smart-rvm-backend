@@ -100,17 +100,40 @@ export function useUserList() {
       if (usersError) throw new Error(usersError.message);
       if (!usersData || usersData.length === 0) { users.value = []; return; }
 
-      // Fetch submission_reviews to calculate actual weight and points
-      const { data: submissions } = await supabase
-        .from('submission_reviews')
-        .select('user_id,api_weight,points_awarded,status,calculated_value')
+      // Fetch merchant_wallets for official balance + weight (synced from vendor)
+      const { data: wallets } = await supabase
+        .from('merchant_wallets')
+        .select('user_id,current_balance,total_earnings,total_weight')
         .limit(10000);
 
-      // Fetch withdrawals for balance calculation
+      // Fetch submission_reviews for detailed weight/points breakdown
+      const { data: submissions } = await supabase
+        .from('submission_reviews')
+        .select('user_id,api_weight,points_awarded,status')
+        .limit(10000);
+
+      // Fetch withdrawals
       const { data: withdrawals } = await supabase
         .from('withdrawals')
         .select('user_id,amount,status')
         .limit(10000);
+
+      // Aggregate wallets by user (prefer the first wallet with data)
+      const walletMap: Record<string, { balance: number; weight: number }> = {};
+      if (wallets) {
+        for (const w of wallets) {
+          if (!w.user_id) continue;
+          const uid = w.user_id;
+          const bal = Number(w.current_balance || 0);
+          const wt = Number(w.total_weight || 0);
+          if (!walletMap[uid] || bal > 0 || wt > 0) {
+            walletMap[uid] = {
+              balance: bal + (walletMap[uid]?.balance || 0),
+              weight: wt + (walletMap[uid]?.weight || 0)
+            };
+          }
+        }
+      }
 
       // Aggregate submissions by user
       const subTotals: Record<string, { weight: number; points: number }> = {};
@@ -133,17 +156,27 @@ export function useUserList() {
       }
 
       users.value = usersData.map((u: any) => {
-        const subs = subTotals[u.user_id] || { weight: 0, points: 0 };
-        const withdrawn = withdrawTotals[u.user_id] || 0;
-        const balance = Math.max(0, subs.points - withdrawn);
+        const uid = u.user_id;
+        const wallet = walletMap[uid];
+        const subs = subTotals[uid] || { weight: 0, points: 0 };
+        const withdrawn = withdrawTotals[uid] || 0;
+
+        // Use merchant_wallets for balance (official vendor sync) and weight
+        // Fall back to submission_reviews calculation when wallet data is stale/missing
+        const walletBal = wallet?.balance || 0;
+        const walletWt = wallet?.weight || 0;
+        const subWt = subs.weight;
+
         return {
           ...u,
           id: u.id,
           nickname: u.nickname || u.nickName || u.full_name || u.phone || 'User',
-          total_weight: Number(subs.weight.toFixed(2)),
+          // Weight: prefer submission_reviews (most complete), fallback to wallet
+          total_weight: Number((subWt > 0 ? subWt : walletWt).toFixed(2)),
           total_points: Number(subs.points.toFixed(2)),
-          balance: Number(balance.toFixed(2)),
-          earnings: Number(subs.points.toFixed(2)),
+          // Balance: prefer merchant_wallets (official), fallback to calc
+          balance: Number((walletBal > 0 ? walletBal : Math.max(0, subs.points - withdrawn)).toFixed(2)),
+          earnings: Number((walletBal > 0 ? walletBal : subs.points).toFixed(2)),
           last_active_at: u.last_active_at || '',
           status: u.status || 'active',
         };
