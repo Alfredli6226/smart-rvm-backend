@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { fetchAllIntegralRecords, integralToWeight } from '../lib/vendor-live.js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL?.trim() || '';
+const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
 const VENDOR_MERCHANT = process.env.MERCHANT_NO || process.env.VITE_MERCHANT_NO || "";
 const VENDOR_SECRET = process.env.API_SECRET || process.env.SECRET || process.env.VITE_API_SECRET || "";
 const VENDOR_BASE = "https://api.autogcm.com";
@@ -29,7 +29,8 @@ async function fetchVendorUsersWithPoints() {
     return map;
   } catch (e) { console.warn("Vendor points fetch failed:", e.message); return {}; }
 }
-const SUPABASE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+const SUPABASE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+const SUPABASE_ANON_KEY = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -40,11 +41,35 @@ export default async function handler(req, res) {
     // Fetch users from Supabase
     let supabaseUsers = [];
     let supabaseWithdrawals = [];
+    async function tryFetchUsers(headers) {
+      try {
+        const r = await fetch(SUPABASE_URL + '/rest/v1/users?select=user_id,nickname,nickName,phone,total_weight,total_points&limit=10000&order=user_id.asc', { headers });
+        const d = await r.json();
+        return Array.isArray(d) ? d : [];
+      } catch (e) { return []; }
+    }
+    async function tryFetchWithdrawals(headers) {
+      try {
+        const r = await fetch(SUPABASE_URL + '/rest/v1/withdrawals?select=user_id,amount,status&limit=100000', { headers });
+        const d = await r.json();
+        return Array.isArray(d) ? d : [];
+      } catch (e) { return []; }
+    }
+
+    // Try service role key first, fallback to anon key
     if (SUPABASE_URL && SUPABASE_KEY) {
       const authHeaders = { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json' };
       [supabaseUsers, supabaseWithdrawals] = await Promise.all([
-        fetch(SUPABASE_URL + '/rest/v1/users?select=user_id,nickname,phone,total_weight,total_points&limit=10000&order=user_id.asc', { headers: authHeaders }).then(r => r.json()).catch(() => []),
-        fetch(SUPABASE_URL + '/rest/v1/withdrawals?select=user_id,amount,status&limit=100000', { headers: authHeaders }).then(r => r.json()).catch(() => [])
+        tryFetchUsers(authHeaders),
+        tryFetchWithdrawals(authHeaders)
+      ]);
+    }
+    // If service role key returned empty/error, try anon key
+    if ((!supabaseUsers || supabaseUsers.length === 0) && SUPABASE_ANON_KEY) {
+      const anonHeaders = { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY, Accept: 'application/json' };
+      [supabaseUsers, supabaseWithdrawals] = await Promise.all([
+        tryFetchUsers(anonHeaders),
+        tryFetchWithdrawals(anonHeaders)
       ]);
     }
     
@@ -62,8 +87,8 @@ export default async function handler(req, res) {
     const phoneMap = {};
     if (Array.isArray(userRes)) {
       for (const u of userRes) {
-        if (u.user_id) nameMap[String(u.user_id)] = u.nickname || '';
-        if (u.phone) phoneMap[u.phone] = u.nickname || '';
+        if (u.user_id) nameMap[String(u.user_id)] = u.nickname || u.nickName || '';
+        if (u.phone) phoneMap[u.phone] = u.nickname || u.nickName || '';  
       }
     }
 
@@ -131,7 +156,7 @@ export default async function handler(req, res) {
           var totalPts = vBal > 0 ? vBal : supaPts;
           enrichedMap[uid] = {
             userId: uid,
-            name: u.nickname || u.phone || 'User',
+            name: u.nickname || u.nickName || u.phone || 'User',
             phone: u.phone || '',
             totalWeight: parseFloat(u.total_weight || 0),
             totalPoints: totalPts,
