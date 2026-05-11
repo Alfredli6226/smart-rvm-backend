@@ -2,8 +2,8 @@
 // Frontend calls this via POST from autogcm.ts service
 import crypto from 'crypto';
 
-const MERCHANT_NO = process.env.MERCHANT_NO || process.env.VITE_MERCHANT_NO || '';
-const API_SECRET = process.env.API_SECRET || process.env.SECRET || process.env.VITE_API_SECRET || '';
+const MERCHANT_NO = process.env.MERCHANT_NO || process.env.VITE_MERCHANT_NO || '20250902924787';
+const API_SECRET = process.env.API_SECRET || process.env.SECRET || process.env.VITE_API_SECRET || '99368df20fd10d5322f203435ddc9984';
 const VENDOR_BASE = 'https://api.autogcm.com';
 
 function md5(s) { return crypto.createHash('md5').update(s, 'utf8').digest('hex'); }
