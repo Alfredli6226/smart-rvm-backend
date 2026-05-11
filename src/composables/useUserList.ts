@@ -167,22 +167,38 @@ export function useUserList() {
         const subs = subTotals[uid] || { weight: 0, points: 0 };
         const withdrawn = withdrawTotals[uid] || 0;
 
-        // Use merchant_wallets for balance (official vendor sync) and weight
-        // Fall back to submission_reviews calculation when wallet data is stale/missing
+        // 🟢 PRIORITY: users table (vendor-synced via data-sync) > merchant_wallets > submission_reviews
+        const dbWeight = parseFloat(u.total_weight || 0);
+        const dbPoints = parseFloat(u.total_points || 0);
+
         const walletBal = wallet?.balance || 0;
         const walletWt = wallet?.weight || 0;
         const subWt = subs.weight;
+        const subPts = subs.points;
+
+        // total_weight: users.table (vendor sync) -> submission_reviews -> merchant_wallets
+        const finalWeight = dbWeight > 0 
+          ? dbWeight 
+          : (subWt > 0 ? subWt : walletWt);
+
+        // total_points: users.table (vendor sync) -> submission_reviews
+        const finalPoints = dbPoints > 0
+          ? dbPoints
+          : subPts;
+
+        // balance: users.total_points (vendor sync) -> merchant_wallets -> calc
+        const finalBalance = dbPoints > 0
+          ? dbPoints
+          : (walletBal > 0 ? walletBal : Math.max(0, subPts - withdrawn));
 
         return {
           ...u,
           id: u.id,
           nickname: u.nickname || u.nickName || u.full_name || u.phone || 'User',
-          // Weight: prefer submission_reviews (most complete), fallback to wallet
-          total_weight: Number((subWt > 0 ? subWt : walletWt).toFixed(2)),
-          total_points: Number(subs.points.toFixed(2)),
-          // Balance: prefer merchant_wallets (official), fallback to calc
-          balance: Number((walletBal > 0 ? walletBal : Math.max(0, subs.points - withdrawn)).toFixed(2)),
-          earnings: Number((walletBal > 0 ? walletBal : subs.points).toFixed(2)),
+          total_weight: Number(finalWeight.toFixed(2)),
+          total_points: Number(finalPoints.toFixed(2)),
+          balance: Number(finalBalance.toFixed(2)),
+          earnings: Number(finalBalance.toFixed(2)),
           last_active_at: u.last_active_at || '',
           status: u.status || 'active',
         };
