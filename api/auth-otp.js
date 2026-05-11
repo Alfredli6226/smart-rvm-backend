@@ -81,7 +81,7 @@ export default async function handler(req, res) {
             phone: phone,
             otp: generatedOtp,
             token: 'rvm-otp-bridge-2026'
-          }, { timeout: 15000 });
+          }, { timeout: 3000 });
           console.log("Bridge response:", bridgeRes.status, bridgeRes.data);
           if (bridgeRes.data.success) {
             return res.status(200).json({ success: true, msg: "OTP Sent", bridge: 'wacli' });
