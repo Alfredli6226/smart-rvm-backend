@@ -1,5 +1,6 @@
 import { ref, onMounted } from 'vue';
 import { supabase } from '../services/supabase';
+import { proxy, proxySelect, proxyUpdate, proxyInsert, proxyDelete, proxyUpsert } from '../services/supabaseProxy';
 import { useAuthStore } from '../stores/auth';
 import axios from 'axios';
 
@@ -9,312 +10,376 @@ export function useUserList() {
   const loading = ref(true);
   const isSubmitting = ref(false);
 
-  // 1. Fetch Users + Wallet for Current Merchant
-  const fetchUsers = async () => {
-    // Wait for auth to initialize before checking permissions
-    if (auth.loading) {
-      setTimeout(fetchUsers, 100);
+  async function fetchMerchantScopedUsers(merchantId: string) {
+    // Use direct supabase client (frontend VITE env vars work correctly)
+    const [walletsRes, withdrawalsRes, reviewsRes] = await Promise.all([
+      supabase.from('merchant_wallets').select('id,user_id,merchant_id,current_balance,total_earnings,total_weight').eq('merchant_id', merchantId).limit(10000),
+      supabase.from('withdrawals').select('id,user_id,merchant_id,amount,status,created_at').eq('merchant_id', merchantId).limit(10000),
+      supabase.from('submission_reviews').select('id,user_id,merchant_id,calculated_value,status,api_weight,submitted_at,created_at').eq('merchant_id', merchantId).limit(10000),
+    ]);
+
+    const wallets = walletsRes.data || [];
+    const withdrawals = withdrawalsRes.data || [];
+    const reviews = reviewsRes.data || [];
+
+    const userIds = Array.from(new Set([
+      ...wallets.map((row: any) => row.user_id),
+      ...withdrawals.map((row: any) => row.user_id),
+      ...reviews.map((row: any) => row.user_id),
+    ].filter(Boolean)));
+
+    if (userIds.length === 0) {
+      users.value = [];
       return;
     }
 
-    // 1. Define Platform Owner Logic
-    const isPlatformOwner = auth.role === 'SUPER_ADMIN' && !auth.merchantId;
-    const isViewer = auth.role === 'VIEWER';
-    
-    // 2. Security Check - VIEWER can see all data
-    if (!auth.merchantId && !isPlatformOwner && !isViewer) return;
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .in('user_id', userIds)
+      .order('created_at', { ascending: false });
 
+    if (error) throw new Error(error);
+
+    const walletsByUser = wallets.reduce((acc: any, row: any) => {
+      if (!acc[row.user_id]) acc[row.user_id] = [];
+      acc[row.user_id].push(row);
+      return acc;
+    }, {});
+
+    const withdrawalsByUser = withdrawals.reduce((acc: any, row: any) => {
+      if (!acc[row.user_id]) acc[row.user_id] = [];
+      acc[row.user_id].push(row);
+      return acc;
+    }, {});
+
+    const reviewsByUser = reviews.reduce((acc: any, row: any) => {
+      if (!acc[row.user_id]) acc[row.user_id] = [];
+      acc[row.user_id].push(row);
+      return acc;
+    }, {});
+
+    users.value = (data || []).map((u: any) => {
+      const userWallets = walletsByUser[u.id] || [];
+      const userWithdrawals = withdrawalsByUser[u.id] || [];
+      const userReviews = reviewsByUser[u.id] || [];
+
+      const totalEarned = userReviews
+        .filter((r: any) => r.status === 'VERIFIED')
+        .reduce((sum: number, r: any) => sum + Number(r.calculated_value || 0), 0);
+
+      const totalWithdrawn = userWithdrawals
+        .filter((w: any) => w.status !== 'REJECTED')
+        .reduce((sum: number, w: any) => sum + Number(w.amount || 0), 0);
+
+      const walletWeight = userWallets.reduce((sum: number, w: any) => sum + Number(w.total_weight || 0), 0);
+      const walletBalance = userWallets.reduce((sum: number, w: any) => sum + Number(w.current_balance || 0), 0);
+
+      return {
+        ...u,
+        nickname: u.nickname || u.nickName || u.full_name || u.phone,
+        merchant_wallets: userWallets,
+        withdrawals: userWithdrawals,
+        submission_reviews: userReviews,
+        balance: Number(walletBalance.toFixed(2)),
+        earnings: Number(totalEarned.toFixed(2)),
+        total_weight: Number(walletWeight.toFixed(2)),
+      };
+    });
+  }
+
+  const fetchUsers = async () => {
     loading.value = true;
     try {
-        // 3. Build Query
-        // 🔥 ADDED: submission_reviews to get the REAL earned value
-        let query = supabase
-            .from('users')
-            .select(`
-                *,
-                merchant_wallets (
-                    current_balance,
-                    total_earnings,
-                    merchant_id,
-                    total_weight
-                ),
-                withdrawals (
-                    amount,
-                    status,
-                    merchant_id
-                ),
-                submission_reviews (
-                    calculated_value,
-                    status,
-                    merchant_id
-                )
-            `)
-            .order('created_at', { ascending: false });
+      // Direct Supabase query (frontend client uses VITE_SUPABASE_URL which is correct)
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-        // 4. Apply Filter (If not Super Admin)
-        // Note: We still fetch all user data, filtering happens in the map logic for specific columns
-        if (!isPlatformOwner && auth.merchantId) {
-             // Optional: You could optimize here, but filtering in JS is safer for the complex join logic
+      if (usersError) throw new Error(usersError.message);
+      if (!usersData || usersData.length === 0) { users.value = []; return; }
+
+      // Helper to fetch ALL records with pagination (anon key limit is 1000 per page)
+      async function fetchAllRows(table: string, select: string, pageSize = 1000) {
+        const allRows: any[] = [];
+        let from = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from(table as any)
+            .select(select)
+            .range(from, from + pageSize - 1);
+          if (error || !data || data.length === 0) break;
+          allRows.push(...data);
+          if (data.length < pageSize) break;
+          from += pageSize;
         }
+        return allRows;
+      }
 
-        const { data, error } = await query;
-        if (error) throw error;
+      // Fetch ALL wallets, submissions, withdrawals (paginated to overcome 1000-row limit)
+      const [wallets, submissions, withdrawals] = await Promise.all([
+        fetchAllRows('merchant_wallets', 'user_id,current_balance,total_earnings,total_weight'),
+        fetchAllRows('submission_reviews', 'user_id,api_weight,points_awarded,status'),
+        fetchAllRows('withdrawals', 'user_id,amount,status'),
+      ]);
 
-        // 5. Map Data (Replicating useUserProfile Logic)
-        users.value = data.map(u => {
-            let totalEarned = 0;
-            let totalWithdrawn = 0;
-            let currentBalance = 0;
-            
-            // Arrays from the join
-            const userReviews = u.submission_reviews || [];
-            const userWithdrawals = u.withdrawals || [];
-
-            // --- A. MERCHANT VIEW (Specific Merchant Data Only) ---
-            if (auth.merchantId) {
-                // 1. Calculate Earned (Only Verified & This Merchant)
-                totalEarned = userReviews
-                    .filter((r: any) => r.merchant_id === auth.merchantId && r.status === 'VERIFIED')
-                    .reduce((sum: number, r: any) => sum + Number(r.calculated_value || 0), 0);
-
-                // 2. Calculate Withdrawn (Only Approved/Pending & This Merchant)
-                totalWithdrawn = userWithdrawals
-                    .filter((w: any) => w.merchant_id === auth.merchantId && w.status !== 'REJECTED')
-                    .reduce((sum: number, w: any) => sum + Number(w.amount || 0), 0);
-                
-                // 3. Balance
-                currentBalance = totalEarned - totalWithdrawn;
-
-                // (Optional) Weight Logic for Merchant
-                // We can use the wallet weight as it is usually accurate for merchant specific
-                const wallet = u.merchant_wallets?.find((w: any) => w.merchant_id === auth.merchantId);
-                u.display_weight = wallet ? Number(wallet.total_weight || 0) : 0;
-            } 
-            // --- B. SUPER ADMIN VIEW (Global Data) ---
-            else {
-                // 1. Calculate Earned (All Verified Reviews)
-                // 🔥 This fixes the negative balance. We sum the ACTUAL verified reviews, ignoring the 'lifetime_integral' column which might be synced incorrectly.
-                totalEarned = userReviews
-                    .filter((r: any) => r.status === 'VERIFIED')
-                    .reduce((sum: number, r: any) => sum + Number(r.calculated_value || 0), 0);
-
-                // 2. Calculate Withdrawn (All Non-Rejected Withdrawals)
-                totalWithdrawn = userWithdrawals
-                    .filter((w: any) => w.status !== 'REJECTED')
-                    .reduce((sum: number, w: any) => sum + Number(w.amount || 0), 0);
-
-                // 3. Balance
-                currentBalance = totalEarned - totalWithdrawn;
-
-                // Global Weight
-                u.display_weight = Number(u.total_weight || 0);
-            }
-
-            // Get last verified submission date
-            const verifiedReviews = userReviews.filter((r: any) => r.status === 'VERIFIED');
-            const lastVerifiedSubmit = verifiedReviews.length > 0 
-                ? verifiedReviews.sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())[0]?.submitted_at 
-                : null;
-
-            return {
-                ...u,
-                balance: Number(currentBalance.toFixed(2)),
-                earnings: Number(totalEarned.toFixed(2)),
-                total_weight: Number(u.display_weight.toFixed(2)),
-                last_verified_submit: lastVerifiedSubmit,
+      // Aggregate wallets by user (prefer the first wallet with data)
+      const walletMap: Record<string, { balance: number; weight: number }> = {};
+      if (wallets) {
+        for (const w of wallets) {
+          if (!w.user_id) continue;
+          const uid = w.user_id;
+          const bal = Number(w.current_balance || 0);
+          const wt = Number(w.total_weight || 0);
+          if (!walletMap[uid] || bal > 0 || wt > 0) {
+            walletMap[uid] = {
+              balance: bal + (walletMap[uid]?.balance || 0),
+              weight: wt + (walletMap[uid]?.weight || 0)
             };
-        });
+          }
+        }
+      }
 
+      // Aggregate submissions by user
+      const subTotals: Record<string, { weight: number; points: number }> = {};
+      if (submissions) {
+        for (const s of submissions) {
+          if (!s.user_id) continue;
+          if (!subTotals[s.user_id]) subTotals[s.user_id] = { weight: 0, points: 0 };
+          subTotals[s.user_id].weight += Number(s.api_weight || 0);
+          subTotals[s.user_id].points += Number(s.points_awarded || 0);
+        }
+      }
+
+      // Aggregate withdrawals by user
+      const withdrawTotals: Record<string, number> = {};
+      if (withdrawals) {
+        for (const w of withdrawals) {
+          if (!w.user_id || w.status === 'REJECTED') continue;
+          withdrawTotals[w.user_id] = (withdrawTotals[w.user_id] || 0) + Number(w.amount || 0);
+        }
+      }
+
+      users.value = usersData.map((u: any) => {
+        const uid = u.user_id;
+        const wallet = walletMap[uid];
+        const subs = subTotals[uid] || { weight: 0, points: 0 };
+        const withdrawn = withdrawTotals[uid] || 0;
+
+        // 🟢 PRIORITY: users table (vendor-synced via data-sync) > merchant_wallets > submission_reviews
+        const dbWeight = parseFloat(u.total_weight || 0);
+        const dbPoints = parseFloat(u.total_points || 0);
+
+        const walletBal = wallet?.balance || 0;
+        const walletWt = wallet?.weight || 0;
+        const subWt = subs.weight;
+        const subPts = subs.points;
+
+        // total_weight: users.table (vendor sync) -> submission_reviews -> merchant_wallets
+        const finalWeight = dbWeight > 0 
+          ? dbWeight 
+          : (subWt > 0 ? subWt : walletWt);
+
+        // total_points: users.table (vendor sync) -> submission_reviews
+        const finalPoints = dbPoints > 0
+          ? dbPoints
+          : subPts;
+
+        // balance: users.total_points (vendor sync) -> merchant_wallets -> calc
+        const finalBalance = dbPoints > 0
+          ? dbPoints
+          : (walletBal > 0 ? walletBal : Math.max(0, subPts - withdrawn));
+
+        return {
+          ...u,
+          id: u.id,
+          nickname: u.nickname || u.nickName || u.full_name || u.phone || 'User',
+          total_weight: Number(finalWeight.toFixed(2)),
+          total_points: Number(finalPoints.toFixed(2)),
+          balance: Number(finalBalance.toFixed(2)),
+          earnings: Number(finalBalance.toFixed(2)),
+          last_active_at: u.last_active_at || '',
+          status: u.status || 'active',
+        };
+      });
     } catch (err: any) {
-        console.error('Error fetching users:', err.message);
+      console.error('Error fetching users:', err.message);
+      // Fallback: proxy-based merchant-scoped query
+      if (auth.merchantId) {
+        try { await fetchMerchantScopedUsers(auth.merchantId); } catch {}
+      }
     } finally {
-        loading.value = false;
+      loading.value = false;
     }
   };
 
-  // 2. Adjust Balance
   const adjustBalance = async (userId: string, amount: number, note: string, category: 'ADJUSTMENT' | 'WITHDRAWAL') => {
-      if (!userId || amount === 0) return;
-      isSubmitting.value = true;
-      try {
-          let targetMerchantId = auth.merchantId;
+    if (!userId || amount === 0) return;
+    isSubmitting.value = true;
+    try {
+      let targetMerchantId = auth.merchantId;
 
-          // Super Admin Logic: Find User's Primary Wallet to attribute the adjustment to
-          if (!targetMerchantId) {
-              const { data: userWallets } = await supabase
-                  .from('merchant_wallets')
-                  .select('merchant_id')
-                  .eq('user_id', userId)
-                  .order('total_earnings', { ascending: false }) 
-                  .limit(1);
-              
-              targetMerchantId = userWallets?.[0]?.merchant_id;
+      if (!targetMerchantId) {
+        const { data: userWallets } = await proxy.from('merchant_wallets')
+          .select('merchant_id')
+          .eq('user_id', userId)
+          .order('total_earnings', { ascending: false })
+          .limit(1)
+          .run('select');
 
-              // Fallback if user has no wallets yet
-              if (!targetMerchantId) {
-                  const { data: fallback } = await supabase.from('merchants').select('id').limit(1).single();
-                  targetMerchantId = fallback?.id;
-              }
-          }
+        targetMerchantId = userWallets?.[0]?.merchant_id;
 
-          if (!targetMerchantId) throw new Error("Could not determine target merchant.");
-
-          // Update Wallet (Legacy support, though we rely on Ledger now, it's good to keep wallets updated)
-          const { data: wallet } = await supabase
-              .from('merchant_wallets')
-              .select('*')
-              .eq('user_id', userId)
-              .eq('merchant_id', targetMerchantId)
-              .maybeSingle();
-
-          const currentBal = wallet ? Number(wallet.current_balance) : 0;
-          const currentEarn = wallet ? Number(wallet.total_earnings) : 0;
-          const newBalance = currentBal + amount;
-
-          if (wallet) {
-              await supabase.from('merchant_wallets').update({
-                  current_balance: newBalance,
-                  total_earnings: amount > 0 ? currentEarn + amount : currentEarn
-              }).eq('id', wallet.id);
-          } else {
-              await supabase.from('merchant_wallets').insert({
-                  user_id: userId,
-                  merchant_id: targetMerchantId,
-                  current_balance: newBalance,
-                  total_earnings: amount > 0 ? amount : 0
-              });
-          }
-
-          // Create Withdrawal Record (Critical for the calculation above to recognize the deduction)
-          if (category === 'WITHDRAWAL') {
-              await supabase.from('withdrawals').insert({
-                  user_id: userId,
-                  merchant_id: targetMerchantId,
-                  amount: Math.abs(amount),
-                  status: 'EXTERNAL_SYNC' // Matches your logic
-              });
-          }
-          // 🔥 NEW: Handle MANUAL_ADJUSTMENT affecting the balance
-          // If we add money (Positive Adjustment), we should technically add a 'dummy' submission review or handle it via a separate 'adjustments' table.
-          // However, based on your current schema, the calculation above depends on `submission_reviews` (Positive) - `withdrawals` (Negative).
-          // If you do a POSITIVE adjustment here, it won't show up in the list calculation unless it's a submission or we add a logic for `wallet_transactions` in the fetch.
-          // For now, assuming you mostly use this for Withdrawals (Negative).
-          // If you need Positive Adjustments to appear, consider inserting a dummy 'VERIFIED' record into submission_reviews.
-
-          else if (category === 'ADJUSTMENT' && amount > 0) {
-             // Hack to make positive adjustment appear in the ledger calculation
-             await supabase.from('submission_reviews').insert({
-                 user_id: userId,
-                 merchant_id: targetMerchantId,
-                 vendor_record_id: `ADJ-${Date.now()}`,
-                 device_no: 'MANUAL_ADJ',
-                 waste_type: 'Manual Adjustment',
-                 api_weight: 0,
-                 calculated_value: amount, // Positive Value
-                 rate_per_kg: 0,
-                 status: 'VERIFIED',
-                 submitted_at: new Date().toISOString(),
-                 phone: 'MANUAL',
-                 photo_url: ''
-             });
-          }
-
-          // Ledger Entry (Audit Trail)
-          await supabase.from('wallet_transactions').insert({
-              merchant_id: targetMerchantId,
-              user_id: userId,
-              amount: amount,
-              balance_after: newBalance,
-              transaction_type: category === 'WITHDRAWAL' ? 'WITHDRAWAL_SYNC' : 'MANUAL_ADJUSTMENT',
-              description: note || (category === 'WITHDRAWAL' ? 'Imported Historical Withdrawal' : 'Balance Correction')
-          });
-          
-          await fetchUsers(); 
-          return { success: true, newBalance };
-
-      } catch (err: any) {
-          return { success: false, error: err.message };
-      } finally {
-          isSubmitting.value = false;
+        if (!targetMerchantId) {
+          const fallbackRes = await proxy.from('merchants')
+            .select('id')
+            .limit(1)
+            .single()
+            .run('select');
+          targetMerchantId = fallbackRes?.data?.[0]?.id;
+        }
       }
+
+      if (!targetMerchantId) throw new Error('Could not determine target merchant.');
+
+      const walletRes = await proxy.from('merchant_wallets')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('merchant_id', targetMerchantId)
+        .maybeSingle()
+        .run('select');
+      const wallet = walletRes?.data?.[0] || null;
+
+      const currentBal = wallet ? Number(wallet.current_balance) : 0;
+      const currentEarn = wallet ? Number(wallet.total_earnings) : 0;
+      const newBalance = currentBal + amount;
+
+      if (wallet) {
+        await proxyUpdate('merchant_wallets', {
+          current_balance: newBalance,
+          total_earnings: amount > 0 ? currentEarn + amount : currentEarn,
+        }, { id: wallet.id });
+      } else {
+        await proxyInsert('merchant_wallets', {
+          user_id: userId,
+          merchant_id: targetMerchantId,
+          current_balance: newBalance,
+          total_earnings: amount > 0 ? amount : 0,
+        });
+      }
+
+      if (category === 'WITHDRAWAL') {
+        await proxyInsert('withdrawals', {
+          user_id: userId,
+          merchant_id: targetMerchantId,
+          amount: Math.abs(amount),
+          status: 'EXTERNAL_SYNC',
+        });
+      } else if (category === 'ADJUSTMENT' && amount > 0) {
+        await proxyInsert('submission_reviews', {
+          user_id: userId,
+          merchant_id: targetMerchantId,
+          vendor_record_id: `ADJ-${Date.now()}`,
+          device_no: 'MANUAL_ADJ',
+          waste_type: 'Manual Adjustment',
+          api_weight: 0,
+          calculated_value: amount,
+          rate_per_kg: 0,
+          status: 'VERIFIED',
+          submitted_at: new Date().toISOString(),
+          phone: 'MANUAL',
+          photo_url: '',
+        });
+      }
+
+      await proxyInsert('wallet_transactions', {
+        merchant_id: targetMerchantId,
+        user_id: userId,
+        amount,
+        balance_after: newBalance,
+        transaction_type: category === 'WITHDRAWAL' ? 'WITHDRAWAL_SYNC' : 'MANUAL_ADJUSTMENT',
+        description: note || (category === 'WITHDRAWAL' ? 'Imported Historical Withdrawal' : 'Balance Correction'),
+      });
+
+      await fetchUsers();
+      return { success: true, newBalance };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    } finally {
+      isSubmitting.value = false;
+    }
   };
-  
-  // 3. Import User (Unchanged)
+
   const importUser = async (nickname: string, phone: string) => {
-      isSubmitting.value = true;
-      try {
-          const { data: newUser, error: uError } = await supabase
-              .from('users')
-              .upsert({ phone, nickname, is_active: true }, { onConflict: 'phone' })
-              .select().single();
+    isSubmitting.value = true;
+    try {
+      const newUserRes = await proxyUpsert('users', {
+        phone,
+        nickname: nickname || phone,
+        is_active: true,
+      }, 'phone');
 
-          if (uError) throw uError;
+      const newUser = newUserRes?.data?.[0];
+      if (!newUser) throw new Error('Failed to create user');
 
-          if (auth.merchantId) {
-              const { error: wError } = await supabase
-                  .from('merchant_wallets')
-                  .insert({
-                      user_id: newUser.id,
-                      merchant_id: auth.merchantId,
-                      current_balance: 0,
-                      total_earnings: 0
-                  });
-              if (wError && wError.code !== '23505') throw wError;
-          }
-
-          try { await axios.post('/api/onboard', { phone }); } catch (e) { console.warn("Onboard sync warning:", e); }
-
-          await fetchUsers(); 
-          return { success: true };
-
-      } catch (err: any) {
-          console.error("Import failed:", err);
-          return { success: false, error: err.response?.data?.error || err.message };
-      } finally {
-          isSubmitting.value = false;
+      if (auth.merchantId) {
+        const wRes = await proxyInsert('merchant_wallets', {
+          user_id: newUser.id,
+          merchant_id: auth.merchantId,
+          current_balance: 0,
+          total_earnings: 0,
+        });
+        if (wRes.error) throw new Error(wRes.error);
       }
+
+      try {
+        await axios.post('/api/onboard', { phone });
+      } catch (e) {
+        console.warn('Onboard sync warning:', e);
+      }
+
+      await fetchUsers();
+      return { success: true };
+    } catch (err: any) {
+      console.error('Import failed:', err);
+      return { success: false, error: err.response?.data?.error || err.message };
+    } finally {
+      isSubmitting.value = false;
+    }
   };
 
-  // 4. Delete User
   const deleteUser = async (userId: string) => {
-      if (!userId) return { success: false, error: 'User ID is required' };
-      isSubmitting.value = true;
-      try {
-          // Delete related records first (cascading)
-          // Delete merchant_wallets
-          await supabase.from('merchant_wallets').delete().eq('user_id', userId);
-          // Delete withdrawals
-          await supabase.from('withdrawals').delete().eq('user_id', userId);
-          // Delete submission_reviews
-          await supabase.from('submission_reviews').delete().eq('user_id', userId);
-          // Delete wallet_transactions
-          await supabase.from('wallet_transactions').delete().eq('user_id', userId);
-          
-          // Finally delete the user
-          const { error: uError } = await supabase.from('users').delete().eq('id', userId);
-          if (uError) throw uError;
+    if (!userId) return { success: false, error: 'User ID is required' };
+    isSubmitting.value = true;
+    try {
+      await proxyDelete('merchant_wallets', { user_id: userId });
+      await proxyDelete('withdrawals', { user_id: userId });
+      await proxyDelete('submission_reviews', { user_id: userId });
+      await proxyDelete('wallet_transactions', { user_id: userId });
+      const dRes = await proxyDelete('users', { id: userId });
+      if (dRes.error) throw new Error(dRes.error);
 
-          await fetchUsers();
-          return { success: true };
-      } catch (err: any) {
-          console.error('Delete failed:', err);
-          return { success: false, error: err.message };
-      } finally {
-          isSubmitting.value = false;
-      }
+      await fetchUsers();
+      return { success: true };
+    } catch (err: any) {
+      console.error('Delete failed:', err);
+      return { success: false, error: err.message };
+    } finally {
+      isSubmitting.value = false;
+    }
   };
 
   onMounted(() => {
     fetchUsers();
   });
 
-  return { 
-      users, 
-      loading, 
-      isSubmitting,
-      fetchUsers, 
-      adjustBalance, 
-      importUser,
-      deleteUser
+  return {
+    users,
+    loading,
+    isSubmitting,
+    fetchUsers,
+    adjustBalance,
+    importUser,
+    deleteUser,
   };
 }
