@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/auth-otp",
+      "destination": "/api/auth-otp2"
+    },
+    {
       "source": "/api/auth-otp2",
       "destination": "/api/auth-otp2"
     },
