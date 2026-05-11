@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-import axios from 'axios';
+const { createClient } = require('@supabase/supabase-js');
+const axios = require('axios');
 
 // Initialize Supabase with SERVICE ROLE KEY (Bypasses RLS)
 const supabase = createClient(
@@ -12,7 +12,7 @@ const WAAPI_URL = "https://waapi.app/api/v1/instances";
 const WAAPI_ID = (process.env.WAAPI_INSTANCE_ID || '').replace('#', '').trim();
 const WAAPI_TOKEN = (process.env.WAAPI_TOKEN || '').trim();
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');

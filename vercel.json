@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/auth-otp2",
+      "destination": "/api/auth-otp2"
+    },
+    {
       "source": "/((?!api/.*|@.*|.*\\..*).*)",
       "destination": "/index.html"
     }
@@ -8,6 +12,9 @@
   "functions": {
     "api/**/*.ts": {
       "maxDuration": 60
+    },
+    "api/**/*.js": {
+      "maxDuration": 30
     }
   }
 }
