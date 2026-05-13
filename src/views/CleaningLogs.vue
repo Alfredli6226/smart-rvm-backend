@@ -118,13 +118,33 @@ watch(() => auth.role, (newRole) => {
 
 <template>
   <div class="space-y-6">
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+        <p class="text-xs text-gray-500 uppercase font-semibold">Total Records</p>
+        <p class="text-2xl font-bold text-gray-900">{{ records.length }}</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+        <p class="text-xs text-gray-500 uppercase font-semibold">Live Submissions</p>
+        <p class="text-2xl font-bold text-green-600">{{ records.filter(r => r.is_live).length }}</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+        <p class="text-xs text-gray-500 uppercase font-semibold">Cleaning Events</p>
+        <p class="text-2xl font-bold text-blue-600">{{ records.filter(r => !r.is_live).length }}</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+        <p class="text-xs text-gray-500 uppercase font-semibold">Total Weight</p>
+        <p class="text-2xl font-bold text-amber-600">{{ records.reduce((s, r) => s + r.bag_weight_collected, 0).toFixed(1) }} <span class="text-sm font-normal text-gray-500">kg</span></p>
+      </div>
+    </div>
+
     <div class="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-2xl border border-gray-100 shadow-sm gap-4">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 flex items-center">
           <Trash2 class="mr-3 text-emerald-600" :size="28" />
           Waste Disposal Logs
         </h1>
-        <p class="text-sm text-gray-500 mt-1">Monitor bag removal and cleaning activities.</p>
+        <p class="text-sm text-gray-500 mt-1">Monitor waste collection from recycling submissions and cleaning events.</p>
       </div>
 
       <div class="flex gap-3 w-full md:w-auto">
@@ -171,11 +191,12 @@ watch(() => auth.role, (newRole) => {
                     class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer w-4 h-4" 
                 />
             </th>
-            <th class="px-6 py-4">Cleaning Time</th>
+            <th class="px-6 py-4">Date/Time</th>
             <th class="px-6 py-4">Machine</th>
+            <th class="px-6 py-4 text-center">Source</th>
             <th class="px-6 py-4 text-center">Snapshot</th> <th class="px-6 py-4">Waste Type</th>
-            <th class="px-6 py-4 text-center">Collected Weight</th>
-            <th class="px-6 py-4">Operator</th>
+            <th class="px-6 py-4 text-center">Weight</th>
+            <th class="px-6 py-4">Operator / User</th>
             <th class="px-6 py-4 text-center">Status</th>
             <th class="px-6 py-4 text-center">Actions</th>
           </tr>
@@ -213,6 +234,15 @@ watch(() => auth.role, (newRole) => {
             <td class="px-6 py-4">
               <span class="font-mono text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100">
                 {{ item.device_no }}
+              </span>
+            </td>
+
+            <td class="px-6 py-4 text-center">
+              <span v-if="item.is_live" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
+                Live
+              </span>
+              <span v-else class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                Cleaning
               </span>
             </td>
 

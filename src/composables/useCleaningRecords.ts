@@ -13,53 +13,85 @@ export interface CleaningRecord {
     status: 'PENDING' | 'VERIFIED' | 'REJECTED';
     photo_url?: string;
     admin_note?: string;
+    // Live data fields
+    is_live?: boolean;
+    phone?: string;
 }
 
 export function useCleaningRecords() {
     const records = ref<CleaningRecord[]>([]);
     const loading = ref(false);
 
-    // 1. Fetch Logs
+    // 1. Fetch Logs - combines cleaning_records + live submission_reviews data
     const fetchCleaningLogs = async () => {
         const auth = useAuthStore();
         
-        // Wait for auth to be loaded if still loading or role not set
         if (auth.loading || !auth.role) {
-            console.log("CleaningRecords: Waiting for auth/role to be ready... loading:", auth.loading, "role:", auth.role);
+            console.log("CleaningRecords: Waiting for auth/role...");
             return;
         }
         
         loading.value = true;
         try {
-            console.log("CleaningRecords: Fetching data from Supabase...");
-            const { data, error } = await supabase
+            console.log("CleaningRecords: Fetching live data...");
+            
+            // Fetch actual cleaning records
+            const { data: cleanData, error: cleanError } = await supabase
                 .from('cleaning_records')
                 .select('*')
-                .order('cleaned_at', { ascending: false });
+                .order('cleaned_at', { ascending: false })
+                .limit(100);
 
-            if (error) {
-                console.error("CleaningRecords: Supabase error:", error);
+            if (cleanError) console.error("CleaningRecords: Error:", cleanError);
+            
+            const cleanRecords: CleaningRecord[] = (cleanData || []).map((r: any) => ({
+                id: r.id,
+                device_no: r.device_no || '-',
+                waste_type: r.waste_type || 'Mixed',
+                bag_weight_collected: Number(r.bag_weight_collected || 0),
+                cleaned_at: r.cleaned_at || r.created_at,
+                cleaner_name: r.cleaner_name || 'System',
+                status: r.status || 'VERIFIED',
+                photo_url: r.photo_url,
+                admin_note: r.admin_note,
+                is_live: false
+            }));
+
+            // Also fetch live submission reviews as waste disposal records
+            const { data: submissions, error: subError } = await supabase
+                .from('submission_reviews')
+                .select('id, device_no, waste_type, api_weight, calculated_value, submitted_at, phone, photo_url, status')
+                .order('submitted_at', { ascending: false })
+                .limit(200);
+
+            if (subError) console.error("CleaningRecords: Submission fetch error:", subError);
+
+            const subRecords: CleaningRecord[] = (submissions || []).map((s: any) => ({
+                id: `sub-${s.id}`,
+                device_no: s.device_no || '-',
+                waste_type: s.waste_type || 'Recyclable',
+                bag_weight_collected: Number(s.api_weight || 0),
+                cleaned_at: s.submitted_at || new Date().toISOString(),
+                cleaner_name: s.phone ? `User: ${s.phone.substring(0, 8)}...` : 'Unknown',
+                status: s.status === 'VERIFIED' ? 'VERIFIED' : 'PENDING',
+                photo_url: s.photo_url || '',
+                is_live: true,
+                phone: s.phone
+            }));
+
+            // Merge both arrays, sorted by time (newest first)
+            const merged = [...cleanRecords, ...subRecords].sort((a, b) => 
+                new Date(b.cleaned_at).getTime() - new Date(a.cleaned_at).getTime()
+            );
+
+            records.value = merged;
+
+            if (records.value.length === 0) {
+                console.log('[CleaningRecords] No data found from any source');
             } else {
-                console.log("CleaningRecords: Data received:", data?.length, "records");
+                console.log(`[CleaningRecords] Loaded ${records.value.length} records (${cleanRecords.length} cleaning, ${subRecords.length} live submissions)`);
             }
             
-            if (error) throw error;
-            records.value = data as CleaningRecord[];
-
-            // Demo fallback
-            if (records.value.length === 0) {
-                console.log('[CleaningRecords] No real data, using demo values');
-                records.value = Array.from({ length: 10 }, (_, i) => ({
-                    id: `demo-clean-${i}`,
-                    device_no: `DEV-${String.fromCharCode(65 + (i % 4))}`,
-                    cleaner_name: ['John D.', 'Mike S.', 'Sarah K.', 'Tom W.'][i % 4],
-                    waste_type: ['PET', 'Aluminum', 'Paper', 'UCO'][i % 4],
-                    bag_weight_collected: Math.floor(Math.random() * 30) + 5,
-                    status: ['PENDING', 'VERIFIED', 'REJECTED'][i % 3] as any,
-                    cleaned_at: new Date(Date.now() - Math.random() * 14 * 24 * 60 * 60 * 1000).toISOString(),
-                    created_at: new Date(Date.now() - Math.random() * 14 * 24 * 60 * 60 * 1000).toISOString()
-                })) as CleaningRecord[];
-            }
         } catch (err) {
             console.error("Error fetching logs:", err);
         } finally {
@@ -69,6 +101,7 @@ export function useCleaningRecords() {
 
     // 2. Approve
     const approveCleaning = async (id: string) => {
+        if (id.startsWith('sub-')) return; // Can't approve live submissions
         const { error } = await supabase
             .from('cleaning_records')
             .update({ status: 'VERIFIED' })
@@ -78,6 +111,7 @@ export function useCleaningRecords() {
 
     // 3. Reject
     const rejectCleaning = async (id: string, reason: string) => {
+        if (id.startsWith('sub-')) return; // Can't reject live submissions
         const { error } = await supabase
             .from('cleaning_records')
             .update({ status: 'REJECTED', admin_note: reason })
@@ -89,7 +123,8 @@ export function useCleaningRecords() {
     const formatDate = (dateString: string) => {
         if (!dateString) return '-';
         return new Date(dateString).toLocaleString('en-MY', {
-            month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
+            day: '2-digit', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
         });
     };
 
