@@ -1,20 +1,21 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+// ===== Batch Sync All User Totals from Vendor API =====
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
-import crypto from 'crypto';
+import { createHash } from 'crypto';
 
 const API_BASE = "https://api.autogcm.com";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   // CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   const MERCHANT_NO = process.env.VITE_MERCHANT_NO;
   const SECRET = process.env.VITE_API_SECRET;
 
@@ -26,9 +27,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     auth: { autoRefreshToken: false, persistSession: false }
   });
 
-  async function callVendor(phone: string) {
+  async function callVendor(phone) {
     const timestamp = Date.now().toString();
-    const sign = crypto.createHash('md5').update(MERCHANT_NO! + SECRET! + timestamp).digest('hex');
+    const sign = createHash('md5').update(MERCHANT_NO + SECRET + timestamp).digest('hex');
     try {
       const vendorRes = await axios.post(API_BASE + '/api/open/v1/user/account/sync', { phone }, {
         headers: {
@@ -45,13 +46,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         totalWeight: Number(data?.totalWeight || data?.totalRecycleWeight || data?.total_weight || 0),
         error: null
       };
-    } catch (e: any) {
+    } catch (e) {
       return { integral: 0, totalWeight: 0, error: e.message || 'API failed' };
     }
   }
 
   try {
-    // Fetch all users with phone numbers
+    // Fetch ALL users with phone numbers
     const { data: allUsers, error: fetchError } = await supabase
       .from('users')
       .select('id, user_id, phone, total_weight, total_points, nickname')
@@ -61,20 +62,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (fetchError) return res.status(500).json({ error: fetchError.message });
     if (!allUsers || allUsers.length === 0) return res.json({ synced: 0, msg: 'No users found' });
 
-    const results: any[] = [];
+    const results = [];
     let syncedCount = 0;
     let skippedCount = 0;
     let errorCount = 0;
-    let batchSize = 0;
 
+    // Process in batches with delay to avoid rate limiting
     for (let i = 0; i < allUsers.length; i++) {
-      // Process in batches of 10, yield to Vercel timeout
-      if (batchSize >= 10 || i === allUsers.length - 1) {
-        batchSize = 0;
-        // Small delay between batches to avoid rate limiting
-        await new Promise(r => setTimeout(r, 200));
-      }
-
       const user = allUsers[i];
       const vendorData = await callVendor(user.phone);
 
@@ -87,20 +81,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const vendorPoints = vendorData.integral;
       const vendorWeight = vendorData.totalWeight > 0
         ? vendorData.totalWeight
-        : Number((vendorPoints / 0.2).toFixed(2)); // Fallback: weight = points / 0.2
+        : Number((vendorPoints / 0.2).toFixed(2));
 
-      // Check if DB already has correct data
+      // Skip users with zero data in both DB and vendor
       const dbPoints = Number(user.total_points || 0);
       const dbWeight = Number(user.total_weight || 0);
-      const hasExistingData = dbPoints > 0 || dbWeight > 0;
-
-      if (!hasExistingData && vendorPoints === 0) {
+      
+      if (dbPoints === 0 && dbWeight === 0 && vendorPoints === 0) {
         skippedCount++;
-        results.push({ phone: user.phone, status: 'SKIPPED', msg: 'No data in vendor either' });
+        results.push({ phone: user.phone, status: 'SKIPPED', msg: 'No data in either system' });
         continue;
       }
 
-      // Update the users table with vendor data
+      // Update the users table with vendor totals
       const { error: updateErr } = await supabase
         .from('users')
         .update({
@@ -119,12 +112,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           phone: user.phone,
           status: 'SYNCED',
           points: vendorPoints,
-          weight: vendorWeight,
-          was_update: hasExistingData
+          weight: vendorWeight
         });
       }
 
-      batchSize++;
+      // Small delay every 5 users to avoid rate limiting
+      if (i > 0 && i % 5 === 0) {
+        await new Promise(r => setTimeout(r, 300));
+      }
     }
 
     return res.json({
@@ -135,7 +130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       results
     });
 
-  } catch (error: any) {
+  } catch (error) {
     return res.status(500).json({ error: error.message });
   }
 }
