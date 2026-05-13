@@ -17,5 +17,6 @@
     "api/**/*.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "buildCommand": "vite build"
 }
