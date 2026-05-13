@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
-import { detectVelocityFraud } from './velocity-fraud-middleware';
+import { detectVelocityFraud } from './velocity-fraud-middleware.js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL!;
 // 🔴 WAS: const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY!;

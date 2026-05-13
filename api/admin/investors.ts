@@ -42,23 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Server misconfigured: Missing SUPABASE_SERVICE_ROLE_KEY' });
   }
 
-    console.log('[Admin Investors] Key is service role key, proceeding...');
-
-    // ==========================================
-    // GET /api/admin/investors - Test endpoint
-    // ==========================================
-    if (method === 'GET' && !pathId) {
-      console.log('[Admin Investors] Test endpoint hit');
-      return res.status(200).json({ 
-        success: true, 
-        message: 'API is working',
-        envCheck: { 
-          hasUrl: !!supabaseUrl, 
-          hasKey: !!supabaseServiceKey,
-          keyPrefix: supabaseServiceKey?.substring(0, 10)
-        }
-      });
-    }
+  console.log('[Admin Investors] Key is service role key, proceeding...');
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     auth: { autoRefreshToken: false, persistSession: false }
@@ -67,6 +51,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { method, url, headers } = req;
   const pathParts = (url || '').replace('/api/admin/investors', '').split('/').filter(Boolean);
   const pathId = pathParts[0] || null;
+
+  // ==========================================
+  // GET /api/admin/investors - Test endpoint
+  // ==========================================
+  if (method === 'GET' && !pathId) {
+    console.log('[Admin Investors] Test endpoint hit');
+    return res.status(200).json({ 
+      success: true, 
+      message: 'API is working',
+      envCheck: { 
+        hasUrl: !!supabaseUrl, 
+        hasKey: !!supabaseServiceKey,
+        keyPrefix: supabaseServiceKey?.substring(0, 10)
+      }
+    });
+  }
 
   try {
     console.log('[Admin Investors] Request:', req.method, pathId);
